@@ -5,6 +5,8 @@ const AppContext = createContext();
 
 const initialState = {
   currentUser: null,
+  token: localStorage.getItem('meetup_token'),
+  isAuthenticated: false,
   onlineUsers: [],
   activeCall: null,
   socket: null,
@@ -17,7 +19,30 @@ const initialState = {
 const appReducer = (state, action) => {
   switch (action.type) {
     case 'SET_CURRENT_USER':
-      return { ...state, currentUser: action.payload };
+      return { ...state, currentUser: action.payload, isAuthenticated: !!action.payload };
+    case 'SET_TOKEN':
+      return { ...state, token: action.payload };
+    case 'SET_AUTH_STATE':
+      return { 
+        ...state, 
+        currentUser: action.payload.user, 
+        token: action.payload.token,
+        isAuthenticated: !!action.payload.user 
+      };
+    case 'LOGOUT':
+      return {
+        ...state,
+        currentUser: null,
+        token: null,
+        isAuthenticated: false,
+        onlineUsers: [],
+        activeCall: null,
+        socket: null,
+        isConnected: false,
+        callRoom: null,
+        localStream: null,
+        remoteStreams: {},
+      };
     case 'SET_ONLINE_USERS':
       return { ...state, onlineUsers: action.payload };
     case 'ADD_ONLINE_USER':
@@ -68,10 +93,23 @@ const appReducer = (state, action) => {
 export const AppProvider = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  // Check for existing token on app start
   useEffect(() => {
-    // Initialize socket connection when user is set
-    if (state.currentUser && !state.socket) {
-      const socket = io(process.env.REACT_APP_SERVER_URL || 'http://localhost:3001');
+    const token = localStorage.getItem('meetup_token');
+    if (token) {
+      // Verify token with backend
+      verifyToken(token);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Initialize socket connection when user is authenticated
+    if (state.currentUser && state.isAuthenticated && !state.socket) {
+      const socket = io(process.env.REACT_APP_SERVER_URL || 'http://localhost:3001', {
+        auth: {
+          token: state.token
+        }
+      });
       
       socket.on('connect', () => {
         dispatch({ type: 'SET_CONNECTION_STATUS', payload: true });
@@ -100,8 +138,92 @@ export const AppProvider = ({ children }) => {
         socket.disconnect();
       };
     }
-  }, [state.currentUser, state.socket]);
+  }, [state.currentUser, state.isAuthenticated, state.socket, state.token]);
 
+  // API call helper
+  const apiCall = async (endpoint, options = {}) => {
+    const url = `${process.env.REACT_APP_SERVER_URL || 'http://localhost:3001'}${endpoint}`;
+    const config = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(state.token && { Authorization: `Bearer ${state.token}` }),
+      },
+      ...options,
+    };
+
+    const response = await fetch(url, config);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Something went wrong');
+    }
+
+    return data;
+  };
+
+  // Authentication functions
+  const signup = async (username, email, password) => {
+    try {
+      const data = await apiCall('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      // Auto-login after successful signup
+      return login(email, password);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const login = async (email, password) => {
+    try {
+      const data = await apiCall('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+
+      // Store token and user data
+      localStorage.setItem('meetup_token', data.token);
+      dispatch({ 
+        type: 'SET_AUTH_STATE', 
+        payload: { user: data.user, token: data.token } 
+      });
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('meetup_token');
+    if (state.socket) {
+      state.socket.disconnect();
+    }
+    dispatch({ type: 'LOGOUT' });
+  };
+
+  const verifyToken = async (token) => {
+    try {
+      const data = await apiCall('/api/auth/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      dispatch({ 
+        type: 'SET_AUTH_STATE', 
+        payload: { user: data.user, token } 
+      });
+    } catch (error) {
+      // Token is invalid, remove it
+      localStorage.removeItem('meetup_token');
+      dispatch({ type: 'LOGOUT' });
+    }
+  };
+
+  // Legacy function for backward compatibility
   const joinApp = (username) => {
     const user = {
       id: Date.now().toString(),
@@ -112,13 +234,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const leaveApp = () => {
-    if (state.socket) {
-      state.socket.disconnect();
-    }
-    dispatch({ type: 'SET_CURRENT_USER', payload: null });
-    dispatch({ type: 'SET_SOCKET', payload: null });
-    dispatch({ type: 'SET_ONLINE_USERS', payload: [] });
-    dispatch({ type: 'RESET_CALL_STATE' });
+    logout();
   };
 
   const startCall = (targetUsers, isVideo = false) => {
@@ -160,6 +276,9 @@ export const AppProvider = ({ children }) => {
 
   const value = {
     ...state,
+    signup,
+    login,
+    logout,
     joinApp,
     leaveApp,
     startCall,
