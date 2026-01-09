@@ -21,7 +21,7 @@ const userSchema=new mongoose.Schema(
             minlength:8,
         },
         isOnline:{
-            type:String,
+            type:Boolean,
             default:null
         },
         socketId:{
@@ -32,4 +32,4 @@ const userSchema=new mongoose.Schema(
     },
     { timestamps: true }
 )
-module.exports=mongoose.model("user",userSchema)
+module.exports=mongoose.model("User",userSchema)

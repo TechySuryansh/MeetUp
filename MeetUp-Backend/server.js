@@ -19,12 +19,16 @@ const io = socketIo(server, {
   }
 });
 
-// Middleware
+// Middleware (MUST come before routes)
 app.use(cors({
   origin: process.env.CLIENT_URL || "http://localhost:3000",
   credentials: true
 }));
 app.use(express.json());
+
+// Routes (MUST come after middleware)
+const authRoutes = require("./src/routes/authRoutes");
+app.use("/api/auth", authRoutes);
 
 // Store online users and active calls
 const onlineUsers = new Map();
