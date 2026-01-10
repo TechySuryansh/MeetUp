@@ -9,6 +9,8 @@ const initialState = {
   isAuthenticated: false,
   onlineUsers: [],
   activeCall: null,
+  incomingCall: null,  // NEW: For incoming call modal
+  remoteSocketId: null, // NEW: Socket ID of the person we're calling
   socket: null,
   isConnected: false,
   callRoom: null,
@@ -37,6 +39,8 @@ const appReducer = (state, action) => {
         isAuthenticated: false,
         onlineUsers: [],
         activeCall: null,
+        incomingCall: null,
+        remoteSocketId: null,
         socket: null,
         isConnected: false,
         callRoom: null,
@@ -48,12 +52,12 @@ const appReducer = (state, action) => {
     case 'ADD_ONLINE_USER':
       return { 
         ...state, 
-        onlineUsers: [...state.onlineUsers.filter(u => u.id !== action.payload.id), action.payload] 
+        onlineUsers: [...state.onlineUsers.filter(u => u.socketId !== action.payload.socketId), action.payload] 
       };
     case 'REMOVE_ONLINE_USER':
       return { 
         ...state, 
-        onlineUsers: state.onlineUsers.filter(u => u.id !== action.payload) 
+        onlineUsers: state.onlineUsers.filter(u => u.socketId !== action.payload) 
       };
     case 'SET_SOCKET':
       return { ...state, socket: action.payload };
@@ -61,6 +65,10 @@ const appReducer = (state, action) => {
       return { ...state, isConnected: action.payload };
     case 'SET_ACTIVE_CALL':
       return { ...state, activeCall: action.payload };
+    case 'SET_INCOMING_CALL':
+      return { ...state, incomingCall: action.payload };
+    case 'SET_REMOTE_SOCKET_ID':
+      return { ...state, remoteSocketId: action.payload };
     case 'SET_CALL_ROOM':
       return { ...state, callRoom: action.payload };
     case 'SET_LOCAL_STREAM':
@@ -81,6 +89,8 @@ const appReducer = (state, action) => {
       return {
         ...state,
         activeCall: null,
+        incomingCall: null,
+        remoteSocketId: null,
         callRoom: null,
         localStream: null,
         remoteStreams: {},
@@ -97,7 +107,6 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem('meetup_token');
     if (token) {
-      // Verify token with backend
       verifyToken(token);
     }
   }, []);
@@ -106,30 +115,54 @@ export const AppProvider = ({ children }) => {
     // Initialize socket connection when user is authenticated
     if (state.currentUser && state.isAuthenticated && !state.socket) {
       const socket = io(process.env.REACT_APP_SERVER_URL || 'http://localhost:3001', {
+        transports: ['websocket'],
         auth: {
           token: state.token
         }
       });
       
       socket.on('connect', () => {
+        console.log('🟢 Socket connected:', socket.id);
         dispatch({ type: 'SET_CONNECTION_STATUS', payload: true });
-        socket.emit('user-joined', state.currentUser);
+        socket.emit('user-joined', {
+          ...state.currentUser,
+          socketId: socket.id
+        });
       });
 
       socket.on('disconnect', () => {
+        console.log('🔴 Socket disconnected');
         dispatch({ type: 'SET_CONNECTION_STATUS', payload: false });
       });
 
       socket.on('users-list', (users) => {
+        console.log('📋 Users list received:', users);
         dispatch({ type: 'SET_ONLINE_USERS', payload: users });
       });
 
       socket.on('user-joined', (user) => {
+        console.log('👤 User joined:', user);
         dispatch({ type: 'ADD_ONLINE_USER', payload: user });
       });
 
-      socket.on('user-left', (userId) => {
-        dispatch({ type: 'REMOVE_ONLINE_USER', payload: userId });
+      socket.on('user-left', (socketId) => {
+        console.log('👤 User left:', socketId);
+        dispatch({ type: 'REMOVE_ONLINE_USER', payload: socketId });
+      });
+
+      // Incoming call handler
+      socket.on('incoming-call', ({ from, callerInfo }) => {
+        console.log('📞 Incoming call from:', from);
+        dispatch({ 
+          type: 'SET_INCOMING_CALL', 
+          payload: { from, callerInfo } 
+        });
+      });
+
+      // Call accepted handler
+      socket.on('call-accepted', ({ from }) => {
+        console.log('✅ Call accepted by:', from);
+        dispatch({ type: 'SET_REMOTE_SOCKET_ID', payload: from });
       });
 
       dispatch({ type: 'SET_SOCKET', payload: socket });
@@ -138,7 +171,7 @@ export const AppProvider = ({ children }) => {
         socket.disconnect();
       };
     }
-  }, [state.currentUser, state.isAuthenticated, state.socket, state.token]);
+  }, [state.currentUser, state.isAuthenticated]);
 
   // API call helper
   const apiCall = async (endpoint, options = {}) => {
@@ -164,12 +197,10 @@ export const AppProvider = ({ children }) => {
   // Authentication functions
   const signup = async (username, email, password) => {
     try {
-      const data = await apiCall('/api/auth/signup', {
+      await apiCall('/api/auth/signup', {
         method: 'POST',
         body: JSON.stringify({ username, email, password }),
       });
-
-      // Auto-login after successful signup
       return login(email, password);
     } catch (error) {
       throw error;
@@ -183,7 +214,6 @@ export const AppProvider = ({ children }) => {
         body: JSON.stringify({ email, password }),
       });
 
-      // Store token and user data
       localStorage.setItem('meetup_token', data.token);
       dispatch({ 
         type: 'SET_AUTH_STATE', 
@@ -217,56 +247,89 @@ export const AppProvider = ({ children }) => {
         payload: { user: data.user, token } 
       });
     } catch (error) {
-      // Token is invalid, remove it
       localStorage.removeItem('meetup_token');
       dispatch({ type: 'LOGOUT' });
     }
-  };
-
-  // Legacy function for backward compatibility
-  const joinApp = (username) => {
-    const user = {
-      id: Date.now().toString(),
-      username,
-      joinedAt: new Date().toISOString(),
-    };
-    dispatch({ type: 'SET_CURRENT_USER', payload: user });
   };
 
   const leaveApp = () => {
     logout();
   };
 
-  const startCall = (targetUsers, isVideo = false) => {
-    const callData = {
-      id: Date.now().toString(),
-      initiator: state.currentUser,
-      participants: [state.currentUser, ...targetUsers],
-      isVideo,
-      startedAt: new Date().toISOString(),
-    };
-    dispatch({ type: 'SET_ACTIVE_CALL', payload: callData });
-    
-    if (state.socket) {
-      state.socket.emit('start-call', callData);
+  // Call a user by their socket ID
+  const callUser = (targetUser) => {
+    if (state.socket && targetUser.socketId) {
+      console.log('📞 Calling user:', targetUser);
+      
+      // Set active call state
+      dispatch({ 
+        type: 'SET_ACTIVE_CALL', 
+        payload: {
+          id: Date.now().toString(),
+          isVideo: true,
+          initiator: state.currentUser,
+          target: targetUser,
+          startedAt: new Date().toISOString(),
+        }
+      });
+      
+      dispatch({ type: 'SET_REMOTE_SOCKET_ID', payload: targetUser.socketId });
+      
+      // Emit call-user event
+      state.socket.emit('call-user', { 
+        to: targetUser.socketId,
+        callerInfo: state.currentUser
+      });
     }
   };
 
-  const joinCall = (callId) => {
-    if (state.socket) {
-      state.socket.emit('join-call', { callId, user: state.currentUser });
+  // Accept incoming call
+  const acceptCall = () => {
+    if (state.socket && state.incomingCall) {
+      console.log('✅ Accepting call from:', state.incomingCall.from);
+      
+      // Set active call state
+      dispatch({ 
+        type: 'SET_ACTIVE_CALL', 
+        payload: {
+          id: Date.now().toString(),
+          isVideo: true,
+          initiator: state.incomingCall.callerInfo,
+          startedAt: new Date().toISOString(),
+        }
+      });
+      
+      dispatch({ type: 'SET_REMOTE_SOCKET_ID', payload: state.incomingCall.from });
+      
+      // Emit call-accepted event
+      state.socket.emit('call-accepted', { 
+        to: state.incomingCall.from 
+      });
+      
+      // Clear incoming call
+      dispatch({ type: 'SET_INCOMING_CALL', payload: null });
     }
   };
 
-  const leaveCall = () => {
-    if (state.socket && state.activeCall) {
-      state.socket.emit('leave-call', { 
-        callId: state.activeCall.id, 
-        userId: state.currentUser.id 
+  // Reject incoming call
+  const rejectCall = () => {
+    if (state.socket && state.incomingCall) {
+      console.log('❌ Rejecting call from:', state.incomingCall.from);
+      state.socket.emit('call-rejected', { 
+        to: state.incomingCall.from 
+      });
+      dispatch({ type: 'SET_INCOMING_CALL', payload: null });
+    }
+  };
+
+  // End call
+  const endCall = () => {
+    if (state.socket && state.remoteSocketId) {
+      state.socket.emit('call-ended', { 
+        to: state.remoteSocketId 
       });
     }
     
-    // Clean up local stream
     if (state.localStream) {
       state.localStream.getTracks().forEach(track => track.stop());
     }
@@ -279,11 +342,11 @@ export const AppProvider = ({ children }) => {
     signup,
     login,
     logout,
-    joinApp,
     leaveApp,
-    startCall,
-    joinCall,
-    leaveCall,
+    callUser,
+    acceptCall,
+    rejectCall,
+    endCall,
     dispatch,
   };
 

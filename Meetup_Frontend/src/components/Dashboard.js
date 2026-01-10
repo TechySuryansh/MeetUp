@@ -2,50 +2,58 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import UserCard from './UserCard';
 import CreateRoomModal from './CreateRoomModal';
+import IncomingCallModal from './Call/IncomingCallModal';
 
 const Dashboard = () => {
-  const { currentUser, onlineUsers, leaveApp, startCall } = useApp();
+  const { 
+    currentUser, 
+    onlineUsers, 
+    leaveApp, 
+    callUser,
+    incomingCall,
+    acceptCall,
+    rejectCall,
+    isConnected
+  } = useApp();
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [roomId, setRoomId] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState([]);
 
+  // Debug logging
+  console.log('🔍 Dashboard Debug:');
+  console.log('- Current User:', currentUser);
+  console.log('- Online Users:', onlineUsers);
+  console.log('- Socket Connected:', isConnected);
+
+  // Filter out current user from online users
   const otherUsers = onlineUsers.filter(user => user.id !== currentUser?.id);
 
-  const handleUserSelect = (user) => {
-    setSelectedUsers(prev => {
-      const isSelected = prev.find(u => u.id === user.id);
-      if (isSelected) {
-        return prev.filter(u => u.id !== user.id);
-      } else {
-        return [...prev, user];
-      }
-    });
+  const handleVideoCall = (user) => {
+    console.log('📹 Starting video call with:', user);
+    callUser(user);
   };
 
   const handleAudioCall = (user) => {
-    startCall([user], false);
-  };
-
-  const handleVideoCall = (user) => {
-    startCall([user], true);
-  };
-
-  const handleGroupCall = (isVideo = false) => {
-    if (selectedUsers.length > 0) {
-      startCall(selectedUsers, isVideo);
-      setSelectedUsers([]);
-    }
+    console.log('📞 Starting audio call with:', user);
+    callUser(user);
   };
 
   const handleJoinRoom = () => {
     if (roomId.trim()) {
-      // Join room logic would go here
       console.log('Joining room:', roomId);
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-900 flex">
+      {/* Incoming Call Modal */}
+      {incomingCall && (
+        <IncomingCallModal
+          caller={incomingCall.callerInfo?.username || 'Unknown'}
+          onAccept={acceptCall}
+          onReject={rejectCall}
+        />
+      )}
+
       {/* Sidebar */}
       <div className="w-80 bg-slate-800 border-r border-gray-700 flex flex-col">
         {/* Header */}
@@ -55,7 +63,7 @@ const Dashboard = () => {
             <button
               onClick={leaveApp}
               className="text-gray-400 hover:text-white transition-colors"
-              title="Leave"
+              title="Logout"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -71,9 +79,11 @@ const Dashboard = () => {
             </div>
             <div>
               <p className="text-white font-medium">{currentUser?.username}</p>
-              <div className="flex items-center text-sm text-green-400">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                Online
+              <div className="flex items-center text-sm">
+                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
+                <span className={isConnected ? 'text-green-400' : 'text-yellow-400'}>
+                  {isConnected ? 'Online' : 'Connecting...'}
+                </span>
               </div>
             </div>
           </div>
@@ -85,24 +95,6 @@ const Dashboard = () => {
             <h3 className="text-lg font-medium text-white">
               Online Users ({otherUsers.length})
             </h3>
-            {selectedUsers.length > 0 && (
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleGroupCall(false)}
-                  className="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded"
-                  title="Start group audio call"
-                >
-                  Audio ({selectedUsers.length})
-                </button>
-                <button
-                  onClick={() => handleGroupCall(true)}
-                  className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded"
-                  title="Start group video call"
-                >
-                  Video ({selectedUsers.length})
-                </button>
-              </div>
-            )}
           </div>
 
           <div className="space-y-2">
@@ -114,15 +106,13 @@ const Dashboard = () => {
                   </svg>
                 </div>
                 <p className="text-gray-400 text-sm">No other users online</p>
-                <p className="text-gray-500 text-xs mt-1">Share your room ID to invite friends</p>
+                <p className="text-gray-500 text-xs mt-1">Open another browser tab to test</p>
               </div>
             ) : (
               otherUsers.map(user => (
                 <UserCard
-                  key={user.id}
+                  key={user.socketId || user.id}
                   user={user}
-                  isSelected={selectedUsers.find(u => u.id === user.id)}
-                  onSelect={() => handleUserSelect(user)}
                   onAudioCall={() => handleAudioCall(user)}
                   onVideoCall={() => handleVideoCall(user)}
                 />
@@ -130,18 +120,6 @@ const Dashboard = () => {
             )}
           </div>
         </div>
-
-        {/* Clear Selection */}
-        {selectedUsers.length > 0 && (
-          <div className="p-4 border-t border-gray-700">
-            <button
-              onClick={() => setSelectedUsers([])}
-              className="w-full text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              Clear selection ({selectedUsers.length})
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Main Content */}

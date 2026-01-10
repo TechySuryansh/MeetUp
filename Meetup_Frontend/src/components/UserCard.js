@@ -1,6 +1,11 @@
 import React from 'react';
 
 const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
+  // Safety check for user data
+  if (!user || !user.username) {
+    return null;
+  }
+
   return (
     <div 
       className={`user-card ${isSelected ? 'ring-2 ring-blue-500 bg-blue-900/20' : ''}`}
@@ -11,14 +16,14 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
           <div className="relative">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
               <span className="text-white font-semibold text-sm">
-                {user.username.charAt(0).toUpperCase()}
+                {user.username?.charAt(0)?.toUpperCase() || '?'}
               </span>
             </div>
             <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-slate-800 rounded-full"></div>
           </div>
           
           <div className="flex-1 min-w-0">
-            <p className="text-white font-medium truncate">{user.username}</p>
+            <p className="text-white font-medium truncate">{user.username || 'Unknown'}</p>
             <p className="text-xs text-gray-400">Online</p>
           </div>
 
@@ -35,7 +40,7 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onAudioCall();
+              onAudioCall?.();
             }}
             className="p-2 text-gray-400 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-all duration-200"
             title="Audio call"
@@ -48,7 +53,7 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onVideoCall();
+              onVideoCall?.();
             }}
             className="p-2 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all duration-200"
             title="Video call"
