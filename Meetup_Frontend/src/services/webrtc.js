@@ -74,8 +74,28 @@ export const addIceCandidate = async (candidate) => {
   }
 };
 
-// ❌ End call
+// ❌ End call - stops all tracks and closes connection
 export const closeConnection = () => {
-  peerConnection?.close();
-  peerConnection = null;
+  // Stop all local stream tracks (camera + mic)
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      track.stop();
+      console.log('🛑 Stopped track:', track.kind);
+    });
+    localStream = null;
+  }
+  
+  // Stop remote stream tracks
+  if (remoteStream) {
+    remoteStream.getTracks().forEach(track => track.stop());
+    remoteStream = null;
+  }
+  
+  // Close peer connection
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  
+  console.log('📴 Connection closed, all tracks stopped');
 };

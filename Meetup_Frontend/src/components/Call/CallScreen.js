@@ -34,11 +34,9 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
     };
     init();
 
+    // Cleanup on unmount
     return () => {
       closeConnection();
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-      }
     };
   }, []);
 
@@ -124,10 +122,18 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
 
   // End call
   const handleEndCall = () => {
-    closeConnection();
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+    // Clear video elements
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
     }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+    
+    // Close WebRTC connection and stop all tracks
+    closeConnection();
+    setLocalStream(null);
+    
     if (onEndCall) onEndCall();
   };
 
