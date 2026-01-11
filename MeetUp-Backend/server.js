@@ -43,7 +43,7 @@ const io = new Server(server, {
     origin: [
       process.env.CLIENT_URL || "http://localhost:3000",
       "http://localhost:3000",
-      /\.vercel\.app$/  // Allow all Vercel preview URLs
+      process.env.CLIENT_URL
     ],
     methods: ["GET", "POST"],
     credentials: true,
