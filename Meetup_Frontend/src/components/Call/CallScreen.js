@@ -79,11 +79,22 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
     };
   }, [socket]);
 
+  // Auto-start call when remoteSocketId becomes available (for receiver after accepting)
+  useEffect(() => {
+    if (remoteSocketId && localStream && !callStarted) {
+      // Small delay to ensure everything is ready
+      const timer = setTimeout(() => {
+        startCall();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [remoteSocketId, localStream, callStarted]);
+
   // Start call (caller side)
   const startCall = async () => {
     if (!socket || !remoteSocketId || callStarted) return;
     
-    console.log("📞 Starting call to:", remoteSocketId);
+    console.log("📞 Starting WebRTC call to:", remoteSocketId);
     setCallStarted(true);
     
     const remoteStream = createPeerConnection(socket, remoteSocketId);
@@ -184,22 +195,17 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
           {!isConnected && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-700">
               <div className="text-center">
-                <div className="w-20 h-20 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-20 h-20 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
                   <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <p className="text-gray-400 mb-4">Waiting for participant...</p>
-                {remoteSocketId && !callStarted && (
-                  <button
-                    onClick={startCall}
-                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors"
-                  >
-                    Start Call
-                  </button>
-                )}
-                {callStarted && !isConnected && (
-                  <p className="text-yellow-400 text-sm">Calling...</p>
+                {!remoteSocketId ? (
+                  <p className="text-yellow-400">Waiting for other person to accept...</p>
+                ) : callStarted ? (
+                  <p className="text-yellow-400">Connecting...</p>
+                ) : (
+                  <p className="text-gray-400">Preparing call...</p>
                 )}
               </div>
             </div>

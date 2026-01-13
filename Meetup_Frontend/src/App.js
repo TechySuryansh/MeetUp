@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import AuthContainer from './components/auth/AuthContainer';
@@ -15,7 +14,8 @@ const AppRoutes = () => {
   }
 
   // If user is in an active call, show call screen
-  if (activeCall && remoteSocketId) {
+  // Show CallScreen when activeCall exists (caller sets this immediately when clicking call)
+  if (activeCall) {
     return (
       <CallScreen 
         remoteSocketId={remoteSocketId} 
@@ -25,7 +25,7 @@ const AppRoutes = () => {
     );
   }
 
-  // Otherwise show dashboard
+  // Otherwise show dashboard (which also shows IncomingCallModal if there's an incoming call)
   return <Dashboard />;
 };
 
