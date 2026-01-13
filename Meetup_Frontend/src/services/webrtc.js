@@ -1,6 +1,7 @@
 let peerConnection;
 let localStream;
 let remoteStream;
+let screenStream;
 
 const ICE_SERVERS = {
   iceServers: [
@@ -15,6 +16,35 @@ export const getLocalStream = async () => {
     audio: true,
   });
   return localStream;
+};
+
+// 🖥️ Get screen share stream
+export const getScreenStream = async () => {
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        cursor: "always",
+      },
+      audio: false,
+    });
+    return screenStream;
+  } catch (error) {
+    console.error("Error getting screen share:", error);
+    return null;
+  }
+};
+
+// 🔄 Replace video track (for screen share)
+export const replaceVideoTrack = async (newStream) => {
+  if (!peerConnection) return;
+  
+  const videoTrack = newStream.getVideoTracks()[0];
+  const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
+  
+  if (sender && videoTrack) {
+    await sender.replaceTrack(videoTrack);
+    console.log('🔄 Video track replaced');
+  }
 };
 
 // 🔗 Create Peer Connection
@@ -85,6 +115,12 @@ export const closeConnection = () => {
     localStream = null;
   }
   
+  // Stop screen share tracks
+  if (screenStream) {
+    screenStream.getTracks().forEach(track => track.stop());
+    screenStream = null;
+  }
+  
   // Stop remote stream tracks
   if (remoteStream) {
     remoteStream.getTracks().forEach(track => track.stop());
@@ -98,4 +134,21 @@ export const closeConnection = () => {
   }
   
   console.log('📴 Connection closed, all tracks stopped');
+};
+
+// 🖥️ Stop screen share and switch back to camera
+export const stopScreenShare = async () => {
+  if (screenStream) {
+    screenStream.getTracks().forEach(track => track.stop());
+    screenStream = null;
+  }
+  
+  // Switch back to camera
+  if (localStream && peerConnection) {
+    const videoTrack = localStream.getVideoTracks()[0];
+    const sender = peerConnection.getSenders().find(s => s.track?.kind === 'video');
+    if (sender && videoTrack) {
+      await sender.replaceTrack(videoTrack);
+    }
+  }
 };

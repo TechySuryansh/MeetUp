@@ -8,6 +8,9 @@ import {
   setAnswer,
   addIceCandidate,
   closeConnection,
+  getScreenStream,
+  replaceVideoTrack,
+  stopScreenShare,
 } from "../../services/webrtc";
 
 const CallScreen = ({ remoteSocketId, onEndCall }) => {
@@ -16,6 +19,7 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
   const remoteVideoRef = useRef();
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [localStream, setLocalStream] = useState(null);
   const [callStarted, setCallStarted] = useState(false);
@@ -131,6 +135,41 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
     }
   };
 
+  // Toggle screen share
+  const toggleScreenShare = async () => {
+    if (isScreenSharing) {
+      // Stop screen share, switch back to camera
+      await stopScreenShare();
+      if (localVideoRef.current && localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+      setIsScreenSharing(false);
+    } else {
+      // Start screen share
+      const screenStream = await getScreenStream();
+      if (screenStream) {
+        // Replace video track in peer connection
+        await replaceVideoTrack(screenStream);
+        
+        // Show screen share in local video
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = screenStream;
+        }
+        
+        // Listen for when user stops sharing via browser UI
+        screenStream.getVideoTracks()[0].onended = async () => {
+          await stopScreenShare();
+          if (localVideoRef.current && localStream) {
+            localVideoRef.current.srcObject = localStream;
+          }
+          setIsScreenSharing(false);
+        };
+        
+        setIsScreenSharing(true);
+      }
+    }
+  };
+
   // End call
   const handleEndCall = () => {
     // Clear video elements
@@ -216,21 +255,23 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
       {/* Control Bar */}
       <div className="bg-slate-800 border-t border-gray-700 p-4">
         <div className="flex items-center justify-center space-x-4">
-          {/* Mute Button */}
+          {/* Mute Mic Button */}
           <button
             onClick={toggleMute}
             className={`p-4 rounded-full transition-all duration-200 ${
               isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
             } text-white`}
-            title={isMuted ? 'Unmute' : 'Mute'}
+            title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isMuted ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-              )}
-            </svg>
+            {isMuted ? (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 19L5 5m14 0v6a2 2 0 01-2 2H7m0 0v2a5 5 0 0010 0v-2m-5 6v2m-3 0h6" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            )}
           </button>
 
           {/* Video Button */}
@@ -241,13 +282,34 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
             } text-white`}
             title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isVideoOff ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
-              ) : (
+            {isVideoOff ? (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M12 18v.01M8 21l-4-4 4-4M16 3l4 4-4 4" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              )}
-            </svg>
+              </svg>
+            )}
+          </button>
+
+          {/* Screen Share Button */}
+          <button
+            onClick={toggleScreenShare}
+            className={`p-4 rounded-full transition-all duration-200 ${
+              isScreenSharing ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'
+            } text-white`}
+            title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+          >
+            {isScreenSharing ? (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            )}
           </button>
 
           {/* End Call Button */}
