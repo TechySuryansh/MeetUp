@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import UserCard from './UserCard';
 import CreateRoomModal from './CreateRoomModal';
 import IncomingCallModal from './Call/IncomingCallModal';
+import ProfilePage from './Profile/ProfilePage';
 
 const Dashboard = () => {
   const { 
@@ -16,6 +17,7 @@ const Dashboard = () => {
     isConnected
   } = useApp();
   const [showCreateRoom, setShowCreateRoom] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [roomId, setRoomId] = useState('');
 
   // Debug logging
@@ -59,6 +61,11 @@ const Dashboard = () => {
     }
   };
 
+  // Show profile page if active
+  if (showProfile) {
+    return <ProfilePage onBack={() => setShowProfile(false)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 flex">
       {/* Incoming Call Modal */}
@@ -87,13 +94,17 @@ const Dashboard = () => {
             </button>
           </div>
           
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+          <div 
+            className="flex items-center space-x-3 cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg -m-2 transition-colors"
+            onClick={() => setShowProfile(true)}
+            title="View Profile"
+          >
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
               <span className="text-white font-semibold">
                 {currentUser?.username?.charAt(0).toUpperCase()}
               </span>
             </div>
-            <div>
+            <div className="flex-1">
               <p className="text-white font-medium">{currentUser?.username}</p>
               <div className="flex items-center text-sm">
                 <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
@@ -102,6 +113,9 @@ const Dashboard = () => {
                 </span>
               </div>
             </div>
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </div>
         </div>
 
