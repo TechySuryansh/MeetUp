@@ -30,7 +30,8 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
     return null;
   }
 
-  const isOnline = user.isOnline;
+  // Check if user is online - if isOnline is undefined, check if socketId exists (old format)
+  const isOnline = user.isOnline !== undefined ? user.isOnline : !!user.socketId;
   const lastSeenText = !isOnline ? getLastSeenText(user.lastSeen) : null;
 
   return (
@@ -66,7 +67,7 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
           )}
         </div>
 
-        {/* Only show call buttons for online users */}
+        {/* Show call buttons for online users */}
         {isOnline && (
           <div className="flex items-center space-x-2 ml-3">
             <button

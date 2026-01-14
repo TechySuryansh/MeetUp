@@ -26,13 +26,18 @@ const Dashboard = () => {
 
   // Filter out current user and separate online/offline
   const otherUsers = onlineUsers.filter(user => user.id !== currentUser?.id);
-  const onlineCount = otherUsers.filter(user => user.isOnline).length;
+  
+  // Check online status - support both old format (socketId) and new format (isOnline)
+  const isUserOnline = (user) => user.isOnline !== undefined ? user.isOnline : !!user.socketId;
+  const onlineCount = otherUsers.filter(user => isUserOnline(user)).length;
 
   // Sort: online users first, then offline by last seen (most recent first)
   const sortedUsers = [...otherUsers].sort((a, b) => {
-    if (a.isOnline && !b.isOnline) return -1;
-    if (!a.isOnline && b.isOnline) return 1;
-    if (!a.isOnline && !b.isOnline) {
+    const aOnline = isUserOnline(a);
+    const bOnline = isUserOnline(b);
+    if (aOnline && !bOnline) return -1;
+    if (!aOnline && bOnline) return 1;
+    if (!aOnline && !bOnline && a.lastSeen && b.lastSeen) {
       return new Date(b.lastSeen) - new Date(a.lastSeen);
     }
     return 0;
