@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import LoginPage from './LoginPage';
 import SignupPage from './SignupPage';
 
-const AuthContainer = () => {
+const AuthContainer = ({ onBack }) => {
   const [isLogin, setIsLogin] = useState(true);
 
   const switchToSignup = () => setIsLogin(false);
@@ -11,9 +11,9 @@ const AuthContainer = () => {
   return (
     <>
       {isLogin ? (
-        <LoginPage onSwitchToSignup={switchToSignup} />
+        <LoginPage onSwitchToSignup={switchToSignup} onBack={onBack} />
       ) : (
-        <SignupPage onSwitchToLogin={switchToLogin} />
+        <SignupPage onSwitchToLogin={switchToLogin} onBack={onBack} />
       )}
     </>
   );

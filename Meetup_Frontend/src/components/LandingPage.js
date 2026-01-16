@@ -1,125 +1,127 @@
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
 
-const LandingPage = () => {
-  const [username, setUsername] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const { joinApp } = useApp();
+const LandingPage = ({ onJoinMeeting, onHostMeeting, onSignIn }) => {
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [meetingId, setMeetingId] = useState('');
 
-  const validateUsername = (name) => {
-    if (!name.trim()) return 'Username is required';
-    if (name.length < 2) return 'Username must be at least 2 characters';
-    if (name.length > 20) return 'Username must be less than 20 characters';
-    if (!/^[a-zA-Z0-9_-]+$/.test(name)) return 'Username can only contain letters, numbers, hyphens, and underscores';
-    return '';
-  };
-
-  const handleJoin = async (e) => {
-    e.preventDefault();
-    
-    const validationError = validateUsername(username);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      joinApp(username.trim());
-    } catch (err) {
-      setError('Failed to join. Please try again.');
-    } finally {
-      setIsLoading(false);
+  const handleJoin = () => {
+    if (meetingId.trim()) {
+      onJoinMeeting?.(meetingId);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
-      <div className="w-full max-w-md animate-fade-in">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            Meet<span className="text-blue-500">Up</span>
-          </h1>
-          <p className="text-gray-400 text-lg">
-            Connect with friends through video calls
-          </p>
-        </div>
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-gray-100 via-blue-50 to-gray-200">
+      {/* Decorative Elements */}
+      <div className="absolute top-0 left-0 w-96 h-96 bg-blue-200/30 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-200/30 rounded-full blur-3xl translate-x-1/2 translate-y-1/2"></div>
+      <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-blue-100/40 rounded-full blur-2xl"></div>
 
-        <div className="card animate-slide-up">
-          <form onSubmit={handleJoin} className="space-y-6">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
-                Enter your unique username
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  if (error) setError('');
-                }}
-                placeholder="johndoe123"
-                className={`input-field w-full ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
-                disabled={isLoading}
-                autoFocus
-              />
-              {error && (
-                <p className="mt-2 text-sm text-red-400 animate-fade-in">
-                  {error}
-                </p>
-              )}
+      {/* Content */}
+      <div className="relative z-10 min-h-screen flex flex-col">
+        {/* Main Content */}
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center max-w-md w-full bg-white/60 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-white/50">
+            {/* Logo */}
+            <h1 className="text-5xl font-bold text-blue-600 mb-2 tracking-tight">
+              MeetUp
+            </h1>
+            
+            {/* Tagline */}
+            <h2 className="text-2xl text-gray-700 mb-12 font-light">
+              Video Conferencing
+            </h2>
+
+            {/* Action Buttons */}
+            <div className="space-y-4">
+              {/* Join Button */}
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={() => setShowJoinModal(true)}
+                  className="w-28 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors"
+                >
+                  Join
+                </button>
+                <span className="text-gray-600 text-sm flex-1 text-left">
+                  Connect to a meeting in progress
+                </span>
+              </div>
+
+              {/* Host Button */}
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={onHostMeeting}
+                  className="w-28 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors"
+                >
+                  Host
+                </button>
+                <span className="text-gray-600 text-sm flex-1 text-left">
+                  Start a meeting
+                </span>
+              </div>
+
+              {/* Sign In Button */}
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={onSignIn}
+                  className="w-28 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors"
+                >
+                  Sign in
+                </button>
+                <span className="text-gray-600 text-sm flex-1 text-left">
+                  Configure your account
+                </span>
+              </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading || !username.trim()}
-              className={`btn-primary w-full py-3 text-lg font-semibold ${
-                isLoading || !username.trim() 
-                  ? 'opacity-50 cursor-not-allowed' 
-                  : 'hover:shadow-lg transform hover:scale-105'
-              } transition-all duration-200`}
-            >
-              {isLoading ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Joining...
-                </div>
-              ) : (
-                'Join MeetUp'
-              )}
-            </button>
-          </form>
-
-          <div className="mt-6 pt-6 border-t border-gray-700">
-            <div className="text-center text-sm text-gray-400">
-              <p>No account needed • Start calling instantly</p>
-            </div>
+            {/* Made with */}
+            <p className="mt-10 text-gray-500 text-sm">
+              Made with <span className="text-blue-600 font-medium">MeetUp</span>
+            </p>
           </div>
         </div>
 
-        <div className="mt-8 text-center">
-          <div className="flex items-center justify-center space-x-6 text-sm text-gray-500">
-            <div className="flex items-center">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-              Real-time calls
-            </div>
-            <div className="flex items-center">
-              <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
-              HD video & audio
-            </div>
-            <div className="flex items-center">
-              <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
-              Group calls
-            </div>
+        {/* Footer */}
+        <div className="py-4 border-t border-gray-300/50 bg-white/50 backdrop-blur-sm">
+          <div className="flex justify-center gap-8 text-sm text-gray-500">
+            <a href="#" className="hover:text-blue-600 transition-colors">Getting Started</a>
+            <a href="#" className="hover:text-blue-600 transition-colors">Download Client</a>
+            <a href="#" className="hover:text-blue-600 transition-colors">MeetUp Support</a>
           </div>
         </div>
       </div>
+
+      {/* Join Meeting Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">Join a Meeting</h3>
+            <input
+              type="text"
+              value={meetingId}
+              onChange={(e) => setMeetingId(e.target.value)}
+              placeholder="Enter Meeting ID"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 mb-4"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowJoinModal(false)}
+                className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleJoin}
+                disabled={!meetingId.trim()}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Join
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
