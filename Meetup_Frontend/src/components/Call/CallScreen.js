@@ -13,16 +13,28 @@ import {
   stopScreenShare,
 } from "../../services/webrtc";
 
-const CallScreen = ({ remoteSocketId, onEndCall }) => {
-  const { socket } = useApp();
+const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
+  const { socket, currentUser, activeCall } = useApp();
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
+  const chatEndRef = useRef();
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [localStream, setLocalStream] = useState(null);
   const [callStarted, setCallStarted] = useState(false);
+  const [participants, setParticipants] = useState([]);
+  
+  // Chat state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Get room ID from props or activeCall
+  const currentRoomId = roomId || activeCall?.roomId;
+  const isRoomCall = activeCall?.isRoom;
 
   useEffect(() => {
     const init = async () => {
@@ -32,21 +44,66 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
+
+        // If this is a room call, join the room
+        if (isRoomCall && currentRoomId && socket) {
+          console.log("🚪 Joining room:", currentRoomId);
+          socket.emit("join-room", {
+            roomId: currentRoomId,
+            userInfo: {
+              id: currentUser?.id,
+              username: currentUser?.username,
+            },
+          });
+        }
       } catch (error) {
         console.error("Error getting local stream:", error);
       }
     };
     init();
 
-    // Cleanup on unmount
     return () => {
       closeConnection();
+      // Leave room on unmount
+      if (isRoomCall && currentRoomId && socket) {
+        socket.emit("leave-room", { roomId: currentRoomId });
+      }
     };
   }, []);
 
   // SOCKET EVENTS
   useEffect(() => {
     if (!socket) return;
+
+    // Room events
+    socket.on("room-participants", (existingParticipants) => {
+      console.log("📋 Existing participants:", existingParticipants);
+      setParticipants(existingParticipants);
+      
+      // Start call with each existing participant
+      existingParticipants.forEach(async (participant) => {
+        if (participant.socketId && localStream) {
+          console.log("📞 Initiating call with:", participant.username);
+          const remoteStream = createPeerConnection(socket, participant.socketId);
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = remoteStream;
+          }
+          const offer = await createOffer();
+          socket.emit("webrtc-offer", { to: participant.socketId, offer });
+        }
+      });
+    });
+
+    socket.on("user-joined-room", ({ socketId, userInfo }) => {
+      console.log("👤 User joined room:", userInfo.username);
+      setParticipants(prev => [...prev, { socketId, ...userInfo }]);
+      setIsConnected(true);
+    });
+
+    socket.on("user-left-room", ({ socketId }) => {
+      console.log("👤 User left room:", socketId);
+      setParticipants(prev => prev.filter(p => p.socketId !== socketId));
+    });
 
     socket.on("webrtc-offer", async ({ offer, from }) => {
       console.log("📥 Received WebRTC offer from:", from);
@@ -75,18 +132,41 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
       handleEndCall();
     });
 
+    // Chat message received
+    socket.on("chat-message", ({ senderName, message, timestamp }) => {
+      const newMsg = {
+        id: Date.now(),
+        sender: senderName,
+        text: message,
+        timestamp,
+        isMe: false,
+      };
+      setMessages(prev => [...prev, newMsg]);
+      if (!isChatOpen) {
+        setUnreadCount(prev => prev + 1);
+      }
+    });
+
     return () => {
+      socket.off("room-participants");
+      socket.off("user-joined-room");
+      socket.off("user-left-room");
       socket.off("webrtc-offer");
       socket.off("webrtc-answer");
       socket.off("ice-candidate");
       socket.off("call-ended");
+      socket.off("chat-message");
     };
-  }, [socket]);
+  }, [socket, isChatOpen]);
 
-  // Auto-start call when remoteSocketId becomes available (for receiver after accepting)
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Auto-start call
   useEffect(() => {
     if (remoteSocketId && localStream && !callStarted) {
-      // Small delay to ensure everything is ready
       const timer = setTimeout(() => {
         startCall();
       }, 500);
@@ -94,7 +174,6 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
     }
   }, [remoteSocketId, localStream, callStarted]);
 
-  // Start call (caller side)
   const startCall = async () => {
     if (!socket || !remoteSocketId || callStarted) return;
     
@@ -113,7 +192,6 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
     });
   };
 
-  // Toggle mute
   const toggleMute = () => {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
@@ -124,7 +202,6 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
     }
   };
 
-  // Toggle video
   const toggleVideo = () => {
     if (localStream) {
       const videoTrack = localStream.getVideoTracks()[0];
@@ -135,28 +212,20 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
     }
   };
 
-  // Toggle screen share
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      // Stop screen share, switch back to camera
       await stopScreenShare();
       if (localVideoRef.current && localStream) {
         localVideoRef.current.srcObject = localStream;
       }
       setIsScreenSharing(false);
     } else {
-      // Start screen share
       const screenStream = await getScreenStream();
       if (screenStream) {
-        // Replace video track in peer connection
         await replaceVideoTrack(screenStream);
-        
-        // Show screen share in local video
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
-        
-        // Listen for when user stops sharing via browser UI
         screenStream.getVideoTracks()[0].onended = async () => {
           await stopScreenShare();
           if (localVideoRef.current && localStream) {
@@ -164,27 +233,48 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
           }
           setIsScreenSharing(false);
         };
-        
         setIsScreenSharing(true);
       }
     }
   };
 
-  // End call
   const handleEndCall = () => {
-    // Clear video elements
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-    
-    // Close WebRTC connection and stop all tracks
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     closeConnection();
     setLocalStream(null);
-    
     if (onEndCall) onEndCall();
+  };
+
+  // Send chat message
+  const sendMessage = (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !socket || !remoteSocketId) return;
+
+    const msg = {
+      id: Date.now(),
+      sender: currentUser?.username || "You",
+      text: newMessage.trim(),
+      timestamp: new Date().toISOString(),
+      isMe: true,
+    };
+
+    setMessages(prev => [...prev, msg]);
+    socket.emit("chat-message", {
+      to: remoteSocketId,
+      message: newMessage.trim(),
+      senderName: currentUser?.username || "User",
+    });
+    setNewMessage("");
+  };
+
+  const toggleChat = () => {
+    setIsChatOpen(!isChatOpen);
+    if (!isChatOpen) setUnreadCount(0);
+  };
+
+  const formatTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -192,76 +282,159 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
       {/* Header */}
       <div className="bg-slate-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-white">Video Call</h1>
+          <div>
+            <h1 className="text-xl font-semibold text-white">
+              {activeCall?.roomName || (isRoomCall ? `Room: ${currentRoomId?.slice(0, 8)}...` : 'Video Call')}
+            </h1>
+            {isRoomCall && (
+              <p className="text-xs text-gray-400 mt-1">
+                {participants.length + 1} participant{participants.length !== 0 ? 's' : ''}
+              </p>
+            )}
+          </div>
           <div className="flex items-center space-x-2 text-sm">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
+            <div className={`w-2 h-2 rounded-full ${isConnected || isRoomCall ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
             <span className="text-gray-400">{isConnected ? 'Connected' : 'Connecting...'}</span>
           </div>
         </div>
       </div>
 
-      {/* Video Grid */}
-      <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Local Video */}
-        <div className="relative bg-slate-800 rounded-xl overflow-hidden">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            muted
-            playsInline
-            className={`w-full h-full object-cover ${isVideoOff ? 'hidden' : ''}`}
-          />
-          {isVideoOff && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-700">
-              <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-2xl font-bold">You</span>
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Video Grid */}
+        <div className={`flex-1 p-4 grid grid-cols-1 ${!isChatOpen ? 'md:grid-cols-2' : ''} gap-4 transition-all`}>
+          {/* Local Video */}
+          <div className="relative bg-slate-800 rounded-xl overflow-hidden min-h-[200px]">
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className={`w-full h-full object-cover ${isVideoOff ? 'hidden' : ''}`}
+            />
+            {isVideoOff && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-700">
+                <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center">
+                  <span className="text-white text-2xl font-bold">You</span>
+                </div>
               </div>
+            )}
+            <div className="absolute bottom-3 left-3 bg-black/50 px-3 py-1 rounded-lg">
+              <span className="text-white text-sm">You {isMuted && '(Muted)'}</span>
             </div>
-          )}
-          <div className="absolute bottom-3 left-3 bg-black/50 px-3 py-1 rounded-lg">
-            <span className="text-white text-sm">You {isMuted && '(Muted)'}</span>
+          </div>
+
+          {/* Remote Video */}
+          <div className="relative bg-slate-800 rounded-xl overflow-hidden min-h-[200px]">
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            {!isConnected && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-700">
+                <div className="text-center">
+                  <div className="w-20 h-20 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                    <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  {!remoteSocketId ? (
+                    <p className="text-yellow-400">Waiting for other person to accept...</p>
+                  ) : callStarted ? (
+                    <p className="text-yellow-400">Connecting...</p>
+                  ) : (
+                    <p className="text-gray-400">Preparing call...</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Remote Video */}
-        <div className="relative bg-slate-800 rounded-xl overflow-hidden">
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="w-full h-full object-cover"
-          />
-          {!isConnected && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-700">
-              <div className="text-center">
-                <div className="w-20 h-20 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                  <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                {!remoteSocketId ? (
-                  <p className="text-yellow-400">Waiting for other person to accept...</p>
-                ) : callStarted ? (
-                  <p className="text-yellow-400">Connecting...</p>
-                ) : (
-                  <p className="text-gray-400">Preparing call...</p>
-                )}
-              </div>
+        {/* Chat Panel */}
+        {isChatOpen && (
+          <div className="w-80 bg-slate-800 border-l border-gray-700 flex flex-col">
+            {/* Chat Header */}
+            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+              <h3 className="text-white font-medium">Chat</h3>
+              <button
+                onClick={toggleChat}
+                className="text-gray-400 hover:text-white"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-          )}
-        </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {messages.length === 0 ? (
+                <p className="text-gray-500 text-center text-sm">No messages yet</p>
+              ) : (
+                messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] px-3 py-2 rounded-lg ${
+                        msg.isMe
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-700 text-gray-200'
+                      }`}
+                    >
+                      {!msg.isMe && (
+                        <p className="text-xs text-blue-400 mb-1">{msg.sender}</p>
+                      )}
+                      <p className="text-sm break-words">{msg.text}</p>
+                    </div>
+                    <span className="text-xs text-gray-500 mt-1">
+                      {formatTime(msg.timestamp)}
+                    </span>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Message Input */}
+            <form onSubmit={sendMessage} className="p-4 border-t border-gray-700">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 bg-slate-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!newMessage.trim()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Control Bar */}
       <div className="bg-slate-800 border-t border-gray-700 p-4">
         <div className="flex items-center justify-center space-x-4">
-          {/* Mute Mic Button */}
+          {/* Mute Mic */}
           <button
             onClick={toggleMute}
-            className={`p-4 rounded-full transition-all duration-200 ${
+            className={`p-4 rounded-full transition-all ${
               isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
             } text-white`}
-            title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+            title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? (
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,17 +447,17 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
             )}
           </button>
 
-          {/* Video Button */}
+          {/* Video */}
           <button
             onClick={toggleVideo}
-            className={`p-4 rounded-full transition-all duration-200 ${
+            className={`p-4 rounded-full transition-all ${
               isVideoOff ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
             } text-white`}
             title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
           >
             {isVideoOff ? (
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M12 18v.01M8 21l-4-4 4-4M16 3l4 4-4 4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636" />
               </svg>
             ) : (
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -293,29 +466,41 @@ const CallScreen = ({ remoteSocketId, onEndCall }) => {
             )}
           </button>
 
-          {/* Screen Share Button */}
+          {/* Screen Share */}
           <button
             onClick={toggleScreenShare}
-            className={`p-4 rounded-full transition-all duration-200 ${
+            className={`p-4 rounded-full transition-all ${
               isScreenSharing ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'
             } text-white`}
             title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
           >
-            {isScreenSharing ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </button>
+
+          {/* Chat Toggle */}
+          <button
+            onClick={toggleChat}
+            className={`p-4 rounded-full transition-all relative ${
+              isChatOpen ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 hover:bg-gray-700'
+            } text-white`}
+            title="Chat"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            {unreadCount > 0 && !isChatOpen && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                {unreadCount}
+              </span>
             )}
           </button>
 
-          {/* End Call Button */}
+          {/* End Call */}
           <button
             onClick={handleEndCall}
-            className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all duration-200"
+            className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all"
             title="End call"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

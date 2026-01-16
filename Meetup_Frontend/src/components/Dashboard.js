@@ -14,7 +14,9 @@ const Dashboard = () => {
     incomingCall,
     acceptCall,
     rejectCall,
-    isConnected
+    isConnected,
+    joinRoom,
+    dispatch
   } = useApp();
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -58,7 +60,20 @@ const Dashboard = () => {
   const handleJoinRoom = () => {
     if (roomId.trim()) {
       console.log('Joining room:', roomId);
+      // Set active call with room info
+      dispatch({ 
+        type: 'SET_ACTIVE_CALL', 
+        payload: { id: roomId, isVideo: true, isRoom: true, roomId: roomId.trim() }
+      });
     }
+  };
+
+  const handleStartRoomCall = (room) => {
+    console.log('Starting room call:', room);
+    dispatch({ 
+      type: 'SET_ACTIVE_CALL', 
+      payload: { id: room.id, isVideo: room.isVideo, isRoom: true, roomId: room.id, roomName: room.name }
+    });
   };
 
   // Show profile page if active
@@ -234,7 +249,10 @@ const Dashboard = () => {
 
       {/* Create Room Modal */}
       {showCreateRoom && (
-        <CreateRoomModal onClose={() => setShowCreateRoom(false)} />
+        <CreateRoomModal 
+          onClose={() => setShowCreateRoom(false)} 
+          onStartCall={handleStartRoomCall}
+        />
       )}
     </div>
   );
