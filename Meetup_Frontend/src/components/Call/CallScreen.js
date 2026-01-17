@@ -25,7 +25,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const [localStream, setLocalStream] = useState(null);
   const [callStarted, setCallStarted] = useState(false);
   const [participants, setParticipants] = useState([]);
-  
+
   // Chat state
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -79,7 +79,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
     socket.on("room-participants", (existingParticipants) => {
       console.log("📋 Existing participants:", existingParticipants);
       setParticipants(existingParticipants);
-      
+
       // Start call with each existing participant
       existingParticipants.forEach(async (participant) => {
         if (participant.socketId && localStream) {
@@ -133,7 +133,10 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
     });
 
     // Chat message received
-    socket.on("chat-message", ({ senderName, message, timestamp }) => {
+    socket.on("chat-message", ({ senderName, message, timestamp, from }) => {
+      // Ignore my own messages (already added locally)
+      if (from === socket.id) return;
+
       const newMsg = {
         id: Date.now(),
         sender: senderName,
@@ -176,10 +179,10 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
 
   const startCall = async () => {
     if (!socket || !remoteSocketId || callStarted) return;
-    
+
     console.log("📞 Starting WebRTC call to:", remoteSocketId);
     setCallStarted(true);
-    
+
     const remoteStream = createPeerConnection(socket, remoteSocketId);
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteStream;
@@ -249,7 +252,14 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   // Send chat message
   const sendMessage = (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !socket || !remoteSocketId) return;
+    if (!newMessage.trim() || !socket) return;
+
+    // Check if we have a destination (either room ID or remote user)
+    const destination = isRoomCall ? currentRoomId : remoteSocketId;
+    if (!destination) {
+      console.warn("Cannot send message: No destination available");
+      return;
+    }
 
     const msg = {
       id: Date.now(),
@@ -261,7 +271,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
 
     setMessages(prev => [...prev, msg]);
     socket.emit("chat-message", {
-      to: remoteSocketId,
+      to: destination,
       message: newMessage.trim(),
       senderName: currentUser?.username || "User",
     });
@@ -380,11 +390,10 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
                     className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] px-3 py-2 rounded-lg ${
-                        msg.isMe
+                      className={`max-w-[85%] px-3 py-2 rounded-lg ${msg.isMe
                           ? 'bg-blue-600 text-white'
                           : 'bg-slate-700 text-gray-200'
-                      }`}
+                        }`}
                     >
                       {!msg.isMe && (
                         <p className="text-xs text-blue-400 mb-1">{msg.sender}</p>
@@ -431,9 +440,8 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
           {/* Mute Mic */}
           <button
             onClick={toggleMute}
-            className={`p-4 rounded-full transition-all ${
-              isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
-            } text-white`}
+            className={`p-4 rounded-full transition-all ${isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
+              } text-white`}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? (
@@ -450,9 +458,8 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
           {/* Video */}
           <button
             onClick={toggleVideo}
-            className={`p-4 rounded-full transition-all ${
-              isVideoOff ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
-            } text-white`}
+            className={`p-4 rounded-full transition-all ${isVideoOff ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'
+              } text-white`}
             title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
           >
             {isVideoOff ? (
@@ -469,9 +476,8 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
           {/* Screen Share */}
           <button
             onClick={toggleScreenShare}
-            className={`p-4 rounded-full transition-all ${
-              isScreenSharing ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'
-            } text-white`}
+            className={`p-4 rounded-full transition-all ${isScreenSharing ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'
+              } text-white`}
             title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -482,9 +488,8 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
           {/* Chat Toggle */}
           <button
             onClick={toggleChat}
-            className={`p-4 rounded-full transition-all relative ${
-              isChatOpen ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 hover:bg-gray-700'
-            } text-white`}
+            className={`p-4 rounded-full transition-all relative ${isChatOpen ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-600 hover:bg-gray-700'
+              } text-white`}
             title="Chat"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

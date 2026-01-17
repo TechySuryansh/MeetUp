@@ -17,11 +17,11 @@ const initialState = {
 const appReducer = (state, action) => {
   switch (action.type) {
     case 'SET_AUTH_STATE':
-      return { 
-        ...state, 
-        currentUser: action.payload.user, 
+      return {
+        ...state,
+        currentUser: action.payload.user,
         token: action.payload.token,
-        isAuthenticated: !!action.payload.user 
+        isAuthenticated: !!action.payload.user
       };
     case 'LOGOUT':
       return {
@@ -38,12 +38,15 @@ const appReducer = (state, action) => {
       return { ...state, incomingCall: action.payload };
     case 'SET_REMOTE_SOCKET_ID':
       return { ...state, remoteSocketId: action.payload };
+    case 'SET_INCOMING_INVITE':
+      return { ...state, incomingInvite: action.payload };
     case 'RESET_CALL_STATE':
       return {
         ...state,
         activeCall: null,
         incomingCall: null,
         remoteSocketId: null,
+        incomingInvite: null,
       };
     default:
       return state;
@@ -66,7 +69,7 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     if (state.currentUser && state.isAuthenticated) {
       console.log('🔌 Initializing socket connection for user:', state.currentUser.username);
-      
+
       // Create socket connection
       const socket = io(process.env.REACT_APP_SERVER_URL || 'http://localhost:3001', {
         transports: ['websocket', 'polling'],
@@ -74,13 +77,13 @@ export const AppProvider = ({ children }) => {
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
       });
-      
+
       socketRef.current = socket;
 
       socket.on('connect', () => {
         console.log('🟢 Socket connected:', socket.id);
         dispatch({ type: 'SET_CONNECTION_STATUS', payload: true });
-        
+
         // Emit user-joined with user data
         const userData = {
           id: state.currentUser.id,
@@ -108,9 +111,17 @@ export const AppProvider = ({ children }) => {
 
       socket.on('incoming-call', ({ from, callerInfo }) => {
         console.log('📞 Incoming call from:', from, callerInfo);
-        dispatch({ 
-          type: 'SET_INCOMING_CALL', 
-          payload: { from, callerInfo } 
+        dispatch({
+          type: 'SET_INCOMING_CALL',
+          payload: { from, callerInfo }
+        });
+      });
+
+      socket.on('room-invite', ({ roomId, inviterName }) => {
+        console.log('📩 Received room invite from:', inviterName, 'for room:', roomId);
+        dispatch({
+          type: 'SET_INCOMING_INVITE',
+          payload: { roomId, inviterName }
         });
       });
 
@@ -186,9 +197,9 @@ export const AppProvider = ({ children }) => {
     try {
       const url = `${process.env.REACT_APP_SERVER_URL || 'http://localhost:3001'}/api/auth/me`;
       const response = await fetch(url, {
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
+          Authorization: `Bearer ${token}`
         },
       });
       const data = await response.json();
@@ -205,12 +216,12 @@ export const AppProvider = ({ children }) => {
   const callUser = (targetUser) => {
     if (socketRef.current && targetUser.socketId) {
       console.log('📞 Calling user:', targetUser);
-      dispatch({ 
-        type: 'SET_ACTIVE_CALL', 
+      dispatch({
+        type: 'SET_ACTIVE_CALL',
         payload: { id: Date.now().toString(), isVideo: true, target: targetUser }
       });
       dispatch({ type: 'SET_REMOTE_SOCKET_ID', payload: targetUser.socketId });
-      socketRef.current.emit('call-user', { 
+      socketRef.current.emit('call-user', {
         to: targetUser.socketId,
         callerInfo: state.currentUser
       });
@@ -220,8 +231,8 @@ export const AppProvider = ({ children }) => {
   const acceptCall = () => {
     if (socketRef.current && state.incomingCall) {
       console.log('✅ Accepting call');
-      dispatch({ 
-        type: 'SET_ACTIVE_CALL', 
+      dispatch({
+        type: 'SET_ACTIVE_CALL',
         payload: { id: Date.now().toString(), isVideo: true }
       });
       dispatch({ type: 'SET_REMOTE_SOCKET_ID', payload: state.incomingCall.from });

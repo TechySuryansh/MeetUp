@@ -6,12 +6,13 @@ import IncomingCallModal from './Call/IncomingCallModal';
 import ProfilePage from './Profile/ProfilePage';
 
 const Dashboard = () => {
-  const { 
-    currentUser, 
-    onlineUsers, 
-    leaveApp, 
+  const {
+    currentUser,
+    onlineUsers,
+    leaveApp,
     callUser,
     incomingCall,
+    incomingInvite,
     acceptCall,
     rejectCall,
     isConnected,
@@ -30,7 +31,7 @@ const Dashboard = () => {
 
   // Filter out current user and separate online/offline
   const otherUsers = onlineUsers.filter(user => user.id !== currentUser?.id);
-  
+
   // Check online status - support both old format (socketId) and new format (isOnline)
   const isUserOnline = (user) => user.isOnline !== undefined ? user.isOnline : !!user.socketId;
   const onlineCount = otherUsers.filter(user => isUserOnline(user)).length;
@@ -61,8 +62,8 @@ const Dashboard = () => {
     if (roomId.trim()) {
       console.log('Joining room:', roomId);
       // Set active call with room info
-      dispatch({ 
-        type: 'SET_ACTIVE_CALL', 
+      dispatch({
+        type: 'SET_ACTIVE_CALL',
         payload: { id: roomId, isVideo: true, isRoom: true, roomId: roomId.trim() }
       });
     }
@@ -70,8 +71,8 @@ const Dashboard = () => {
 
   const handleStartRoomCall = (room) => {
     console.log('Starting room call:', room);
-    dispatch({ 
-      type: 'SET_ACTIVE_CALL', 
+    dispatch({
+      type: 'SET_ACTIVE_CALL',
       payload: { id: room.id, isVideo: room.isVideo, isRoom: true, roomId: room.id, roomName: room.name }
     });
   };
@@ -92,6 +93,48 @@ const Dashboard = () => {
         />
       )}
 
+      {/* Incoming Invite Modal */}
+      {incomingInvite && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 p-6 rounded-xl border border-gray-700 shadow-2xl max-w-sm w-full text-center">
+            <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-white mb-2">Room Invitation</h3>
+            <p className="text-gray-300 mb-6">
+              <span className="font-bold text-white">{incomingInvite.inviterName}</span> invited you to join a room.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => dispatch({ type: 'SET_INCOMING_INVITE', payload: null })}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+              >
+                Decline
+              </button>
+              <button
+                onClick={() => {
+                  dispatch({
+                    type: 'SET_ACTIVE_CALL',
+                    payload: {
+                      id: incomingInvite.roomId,
+                      isVideo: true,
+                      isRoom: true,
+                      roomId: incomingInvite.roomId
+                    }
+                  });
+                  dispatch({ type: 'SET_INCOMING_INVITE', payload: null });
+                }}
+                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+              >
+                Join Room
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       <div className="w-80 bg-slate-800 border-r border-gray-700 flex flex-col">
         {/* Header */}
@@ -108,8 +151,8 @@ const Dashboard = () => {
               </svg>
             </button>
           </div>
-          
-          <div 
+
+          <div
             className="flex items-center space-x-3 cursor-pointer hover:bg-slate-700/50 p-2 rounded-lg -m-2 transition-colors"
             onClick={() => setShowProfile(true)}
             title="View Profile"
@@ -249,8 +292,8 @@ const Dashboard = () => {
 
       {/* Create Room Modal */}
       {showCreateRoom && (
-        <CreateRoomModal 
-          onClose={() => setShowCreateRoom(false)} 
+        <CreateRoomModal
+          onClose={() => setShowCreateRoom(false)}
           onStartCall={handleStartRoomCall}
         />
       )}
