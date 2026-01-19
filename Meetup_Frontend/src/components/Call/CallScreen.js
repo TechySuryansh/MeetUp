@@ -23,6 +23,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [localStream, setLocalStream] = useState(null);
+  const localStreamRef = useRef(null);
   const [callStarted, setCallStarted] = useState(false);
   const [participants, setParticipants] = useState([]);
 
@@ -41,6 +42,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       try {
         const stream = await getLocalStream();
         setLocalStream(stream);
+        localStreamRef.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
@@ -82,7 +84,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
 
       // Start call with each existing participant
       existingParticipants.forEach(async (participant) => {
-        if (participant.socketId && localStream) {
+        if (participant.socketId && localStreamRef.current) {
           console.log("📞 Initiating call with:", participant.username);
           const remoteStream = createPeerConnection(socket, participant.socketId);
           if (remoteVideoRef.current) {
@@ -244,8 +246,10 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const handleEndCall = () => {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     closeConnection();
     setLocalStream(null);
+    localStreamRef.current = null;
     if (onEndCall) onEndCall();
   };
 
@@ -391,8 +395,8 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
                   >
                     <div
                       className={`max-w-[85%] px-3 py-2 rounded-lg ${msg.isMe
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-700 text-gray-200'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-700 text-gray-200'
                         }`}
                     >
                       {!msg.isMe && (
