@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
+import InviteModal from "./InviteModal";
 import {
   getLocalStream,
   createPeerConnection,
@@ -14,7 +15,7 @@ import {
 } from "../../services/webrtc";
 
 const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
-  const { socket, currentUser, activeCall } = useApp();
+  const { socket, currentUser, activeCall, onlineUsers } = useApp();
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
   const chatEndRef = useRef();
@@ -32,6 +33,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   // Get room ID from props or activeCall
   const currentRoomId = roomId || activeCall?.roomId;
@@ -287,6 +289,18 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
     if (!isChatOpen) setUnreadCount(0);
   };
 
+  const handleInviteUser = (user) => {
+    if (socket && currentRoomId) {
+      console.log('📩 Sending invite to:', user.username);
+      socket.emit('invite-to-room', {
+        roomId: currentRoomId,
+        targetSocketId: user.socketId,
+        inviterName: currentUser?.username || 'Someone',
+      });
+      setShowInviteModal(false);
+    }
+  };
+
   const formatTime = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
@@ -506,6 +520,19 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
             )}
           </button>
 
+          {/* Invite People */}
+          {isRoomCall && (
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="p-4 rounded-full transition-all bg-gray-600 hover:bg-gray-700 text-white"
+              title="Invite people"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            </button>
+          )}
+
           {/* End Call */}
           <button
             onClick={handleEndCall}
@@ -518,6 +545,16 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
           </button>
         </div>
       </div>
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <InviteModal
+          onlineUsers={onlineUsers.filter(u => u.id !== currentUser?.id)}
+          currentParticipants={[{ socketId: socket?.id }, ...participants]}
+          onInvite={handleInviteUser}
+          onClose={() => setShowInviteModal(false)}
+        />
+      )}
     </div>
   );
 };
