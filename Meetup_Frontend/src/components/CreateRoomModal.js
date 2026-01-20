@@ -37,11 +37,16 @@ const CreateRoomModal = ({ onClose, onStartCall }) => {
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 500));
     const room = createRoomObject();
-    if (onStartCall) {
-      onStartCall(room);
+    setCreatedRoom(room);
+    setView('instant');
+    setIsCreating(false);
+  };
+
+  const startCall = () => {
+    if (createdRoom && onStartCall) {
+      onStartCall(createdRoom);
     }
     onClose();
-    setIsCreating(false);
   };
 
   const handleGoogleCalendar = () => {
@@ -68,8 +73,8 @@ const CreateRoomModal = ({ onClose, onStartCall }) => {
     }
   };
 
-  // View: Success Screen (for "Create for later")
-  if (view === 'later' && createdRoom) {
+  // View: Success Screen (for "Create for later" or "Instant meeting")
+  if ((view === 'later' || view === 'instant') && createdRoom) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md border border-gray-700 animate-slide-up">
@@ -86,6 +91,30 @@ const CreateRoomModal = ({ onClose, onStartCall }) => {
             Send this to people you want to meet with. Be sure to save it so you can use it later, too.
           </p>
 
+          {/* Room ID */}
+          <div className="bg-slate-700/50 rounded-lg p-3 mb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-xs mb-1">Room ID</p>
+                <p className="text-white font-mono text-sm">{createdRoom.id}</p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(createdRoom.id);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="text-blue-400 hover:text-blue-300 p-2"
+                title="Copy Room ID"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Room Link */}
           <div className="bg-slate-700 rounded-lg p-3 flex items-center justify-between mb-6">
             <span className="text-white text-sm truncate mr-4">
               {`${window.location.origin}?room=${createdRoom.id}`}
@@ -106,6 +135,16 @@ const CreateRoomModal = ({ onClose, onStartCall }) => {
               )}
             </button>
           </div>
+
+          {/* Join Now button for instant meetings */}
+          {view === 'instant' && (
+            <button
+              onClick={startCall}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors"
+            >
+              Join Now
+            </button>
+          )}
         </div>
       </div>
     );
