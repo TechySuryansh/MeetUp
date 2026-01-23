@@ -19,6 +19,11 @@ const CreateRoomModal = ({ onClose, onStartCall }) => {
     name: roomName || `Meeting ${new Date().toLocaleDateString()}`,
     isVideo,
     createdAt: new Date().toISOString(),
+    host: {
+      id: currentUser?.id,
+      username: currentUser?.username,
+      email: currentUser?.email,
+    },
   });
 
   const handleCreateForLater = async () => {
@@ -135,6 +140,24 @@ const CreateRoomModal = ({ onClose, onStartCall }) => {
               )}
             </button>
           </div>
+
+          {/* Host Information */}
+          {createdRoom.host && (
+            <div className="bg-slate-700/50 rounded-lg p-3 mb-6">
+              <p className="text-gray-400 text-xs mb-2">Meeting Host</p>
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                  <span className="text-white font-semibold text-sm">
+                    {createdRoom.host.username?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-white text-sm font-medium">{createdRoom.host.username}</p>
+                  <p className="text-gray-400 text-xs">{createdRoom.host.email}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Join Now button for instant meetings */}
           {view === 'instant' && (

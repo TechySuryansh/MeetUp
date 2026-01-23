@@ -36,6 +36,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showMeetingInfo, setShowMeetingInfo] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
+  const [roomHost, setRoomHost] = useState(null);
 
   // Get room ID from props or activeCall
   const currentRoomId = roomId || activeCall?.roomId;
@@ -111,6 +112,11 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       setParticipants(prev => prev.filter(p => p.socketId !== socketId));
     });
 
+    socket.on("room-host", (hostInfo) => {
+      console.log("🏠 Room host info received:", hostInfo);
+      setRoomHost(hostInfo);
+    });
+
     socket.on("webrtc-offer", async ({ offer, from }) => {
       console.log("📥 Received WebRTC offer from:", from);
       const remoteStream = createPeerConnection(socket, from);
@@ -160,6 +166,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       socket.off("room-participants");
       socket.off("user-joined-room");
       socket.off("user-left-room");
+      socket.off("room-host");
       socket.off("webrtc-offer");
       socket.off("webrtc-answer");
       socket.off("ice-candidate");
@@ -410,6 +417,29 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
                 <div className="bg-slate-800 rounded-lg p-3">
                   <p className="text-gray-400 text-xs mb-1">Room Name</p>
                   <p className="text-white text-sm">{activeCall.roomName}</p>
+                </div>
+              )}
+
+              {/* Meeting Host */}
+              {roomHost && (
+                <div className="bg-slate-800 rounded-lg p-3">
+                  <p className="text-gray-400 text-xs mb-2">Meeting Host</p>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                      <span className="text-white font-semibold text-sm">
+                        {roomHost.username?.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <p className="text-white text-sm font-medium">{roomHost.username}</p>
+                        <span className="px-2 py-0.5 bg-blue-600/20 text-blue-400 text-xs rounded-full">Host</span>
+                      </div>
+                      {currentUser?.id === roomHost.id && (
+                        <p className="text-green-400 text-xs">You are the host</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
