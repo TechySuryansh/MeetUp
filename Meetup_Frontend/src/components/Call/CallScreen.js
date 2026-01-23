@@ -30,6 +30,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
 
   // Chat state
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const isChatOpenRef = useRef(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
@@ -42,8 +43,9 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const currentRoomId = roomId || activeCall?.roomId;
   const isRoomCall = activeCall?.isRoom;
 
+  // Initialize media stream
   useEffect(() => {
-    const init = async () => {
+    const initMedia = async () => {
       try {
         const stream = await getLocalStream();
         setLocalStream(stream);
@@ -51,32 +53,34 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
-
-        // If this is a room call, join the room
-        if (isRoomCall && currentRoomId && socket) {
-          console.log("🚪 Joining room:", currentRoomId);
-          socket.emit("join-room", {
-            roomId: currentRoomId,
-            userInfo: {
-              id: currentUser?.id,
-              username: currentUser?.username,
-            },
-          });
-        }
       } catch (error) {
         console.error("Error getting local stream:", error);
       }
     };
-    init();
+    initMedia();
 
     return () => {
       closeConnection();
-      // Leave room on unmount
-      if (isRoomCall && currentRoomId && socket) {
-        socket.emit("leave-room", { roomId: currentRoomId });
-      }
     };
   }, []);
+
+  // Join room when socket is ready
+  useEffect(() => {
+    if (isRoomCall && currentRoomId && socket) {
+      console.log("🚪 Joining room:", currentRoomId);
+      socket.emit("join-room", {
+        roomId: currentRoomId,
+        userInfo: {
+          id: currentUser?.id,
+          username: currentUser?.username,
+        },
+      });
+
+      return () => {
+        socket.emit("leave-room", { roomId: currentRoomId });
+      };
+    }
+  }, [isRoomCall, currentRoomId, socket, currentUser]);
 
   // SOCKET EVENTS
   useEffect(() => {
@@ -157,7 +161,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
         isMe: false,
       };
       setMessages(prev => [...prev, newMsg]);
-      if (!isChatOpen) {
+      if (!isChatOpenRef.current) {
         setUnreadCount(prev => prev + 1);
       }
     });
@@ -173,7 +177,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       socket.off("call-ended");
       socket.off("chat-message");
     };
-  }, [socket, isChatOpen]);
+  }, [socket]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -295,6 +299,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
 
   const toggleChat = () => {
     setIsChatOpen(!isChatOpen);
+    isChatOpenRef.current = !isChatOpen;
     if (!isChatOpen) setUnreadCount(0);
   };
 
