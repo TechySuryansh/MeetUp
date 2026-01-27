@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useApp } from "../../context/AppContext";
 import InviteModal from "./InviteModal";
 import {
@@ -38,6 +38,8 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const [showMeetingInfo, setShowMeetingInfo] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [roomHost, setRoomHost] = useState(null);
+  const messagesRef = useRef([]); // Persist messages across socket changes
+  const messageIdsRef = useRef(new Set()); // Track message IDs to prevent duplicates
 
   // Get room ID from props or activeCall
   const currentRoomId = roomId || activeCall?.roomId;
@@ -81,6 +83,30 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       };
     }
   }, [isRoomCall, currentRoomId, socket, currentUser]);
+
+  // Handle socket reconnection - rejoin room
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReconnect = () => {
+      console.log('🔄 Socket reconnected, rejoining room...');
+      if (isRoomCall && currentRoomId) {
+        socket.emit('join-room', {
+          roomId: currentRoomId,
+          userInfo: {
+            id: currentUser?.id,
+            username: currentUser?.username,
+          },
+        });
+      }
+    };
+
+    socket.on('reconnect', handleReconnect);
+
+    return () => {
+      socket.off('reconnect', handleReconnect);
+    };
+  }, [socket, isRoomCall, currentRoomId, currentUser]);
 
   // SOCKET EVENTS
   useEffect(() => {
@@ -148,23 +174,39 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       handleEndCall();
     });
 
-    // Chat message received
-    socket.on("chat-message", ({ senderName, message, timestamp, from }) => {
-      // Ignore my own messages (already added locally)
-      if (from === socket.id) return;
+    // Chat message received - backend already filters out sender
+    const handleChatMessage = ({ senderName, message, timestamp, from }) => {
+      // Create unique message ID
+      const msgId = `${from}-${timestamp}-${message.substring(0, 10)}`;
+
+      // Prevent duplicates using message ID tracking
+      if (messageIdsRef.current.has(msgId)) {
+        console.log('⚠️ Duplicate message detected, ignoring:', msgId);
+        return;
+      }
+
+      messageIdsRef.current.add(msgId);
 
       const newMsg = {
-        id: Date.now(),
+        id: Date.now() + Math.random(), // Ensure unique ID
         sender: senderName,
         text: message,
         timestamp,
         isMe: false,
       };
-      setMessages(prev => [...prev, newMsg]);
+
+      setMessages(prev => {
+        const updated = [...prev, newMsg];
+        messagesRef.current = updated; // Persist in ref
+        return updated;
+      });
+
       if (!isChatOpenRef.current) {
         setUnreadCount(prev => prev + 1);
       }
-    });
+    };
+
+    socket.on("chat-message", handleChatMessage);
 
     return () => {
       socket.off("room-participants");
@@ -175,9 +217,9 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       socket.off("webrtc-answer");
       socket.off("ice-candidate");
       socket.off("call-ended");
-      socket.off("chat-message");
+      socket.off("chat-message", handleChatMessage);
     };
-  }, [socket]);
+  }, [socket]); // Only re-run when socket instance changes
 
   // Auto-scroll chat
   useEffect(() => {
@@ -280,20 +322,33 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       return;
     }
 
+    const timestamp = new Date().toISOString();
+    const msgId = `${socket.id}-${timestamp}-${newMessage.trim().substring(0, 10)}`;
+
+    // Track our own message to prevent duplicates
+    messageIdsRef.current.add(msgId);
+
     const msg = {
-      id: Date.now(),
+      id: Date.now() + Math.random(),
       sender: currentUser?.username || "You",
       text: newMessage.trim(),
-      timestamp: new Date().toISOString(),
+      timestamp,
       isMe: true,
     };
 
-    setMessages(prev => [...prev, msg]);
+    // Optimistic update - add message immediately to UI
+    setMessages(prev => {
+      const updated = [...prev, msg];
+      messagesRef.current = updated;
+      return updated;
+    });
+
     socket.emit("chat-message", {
       to: destination,
       message: newMessage.trim(),
       senderName: currentUser?.username || "User",
     });
+
     setNewMessage("");
   };
 

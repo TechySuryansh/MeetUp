@@ -26,7 +26,7 @@ const LandingPage = ({ onJoinMeeting, onHostMeeting, onSignIn }) => {
             <h1 className="text-5xl font-bold text-blue-600 mb-2 tracking-tight">
               MeetUp
             </h1>
-            
+
             {/* Tagline */}
             <h2 className="text-2xl text-gray-700 mb-12 font-light">
               Video Conferencing
@@ -101,7 +101,7 @@ const LandingPage = ({ onJoinMeeting, onHostMeeting, onSignIn }) => {
               value={meetingId}
               onChange={(e) => setMeetingId(e.target.value)}
               placeholder="Enter Meeting ID"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 mb-4"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 mb-4 text-gray-900"
               autoFocus
             />
             <div className="flex gap-3">

@@ -12,6 +12,8 @@ const initialState = {
   incomingCall: null,
   remoteSocketId: null,
   isConnected: false,
+  socket: null, // Store socket in state for proper re-renders
+  activeRoomId: null, // Track active room for reconnection
 };
 
 const appReducer = (state, action) => {
@@ -40,6 +42,10 @@ const appReducer = (state, action) => {
       return { ...state, remoteSocketId: action.payload };
     case 'SET_INCOMING_INVITE':
       return { ...state, incomingInvite: action.payload };
+    case 'SET_SOCKET':
+      return { ...state, socket: action.payload };
+    case 'SET_ACTIVE_ROOM_ID':
+      return { ...state, activeRoomId: action.payload };
     case 'RESET_CALL_STATE':
       return {
         ...state,
@@ -83,6 +89,7 @@ export const AppProvider = ({ children }) => {
       socket.on('connect', () => {
         console.log('🟢 Socket connected:', socket.id);
         dispatch({ type: 'SET_CONNECTION_STATUS', payload: true });
+        dispatch({ type: 'SET_SOCKET', payload: socket });
 
         // Emit user-joined with user data
         const userData = {
@@ -94,6 +101,30 @@ export const AppProvider = ({ children }) => {
         socket.emit('user-joined', userData);
       });
 
+      socket.on('reconnect', (attemptNumber) => {
+        console.log('🔄 Socket reconnected after', attemptNumber, 'attempts');
+        dispatch({ type: 'SET_CONNECTION_STATUS', payload: true });
+        dispatch({ type: 'SET_SOCKET', payload: socket });
+
+        // Re-emit user-joined on reconnection
+        const userData = {
+          id: state.currentUser.id,
+          username: state.currentUser.username,
+          email: state.currentUser.email,
+        };
+        console.log('📤 Re-emitting user-joined after reconnect:', userData);
+        socket.emit('user-joined', userData);
+      });
+
+      socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log('🔄 Reconnection attempt', attemptNumber);
+      });
+
+      socket.on('reconnect_failed', () => {
+        console.log('❌ Reconnection failed');
+        dispatch({ type: 'SET_CONNECTION_STATUS', payload: false });
+      });
+
       socket.on('connect_error', (error) => {
         console.log('🔴 Socket connection error:', error.message);
       });
@@ -101,6 +132,12 @@ export const AppProvider = ({ children }) => {
       socket.on('disconnect', (reason) => {
         console.log('🔴 Socket disconnected:', reason);
         dispatch({ type: 'SET_CONNECTION_STATUS', payload: false });
+
+        // Auto-reconnect for certain disconnect reasons
+        if (reason === 'io server disconnect') {
+          // Server disconnected the socket, need to reconnect manually
+          socket.connect();
+        }
       });
 
       socket.on('users-list', (users) => {
@@ -258,7 +295,7 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{
       ...state,
-      socket: socketRef.current,
+      socket: state.socket, // Use socket from state instead of ref
       signup,
       login,
       logout,
