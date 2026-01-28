@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { Phone, Video, Clock } from 'lucide-react';
 
 // Helper function to format last seen time
 const getLastSeenText = (lastSeen) => {
@@ -35,42 +37,82 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
   const lastSeenText = !isOnline ? getLastSeenText(user.lastSeen) : null;
 
   return (
-    <div 
-      className={`user-card ${isSelected ? 'ring-2 ring-blue-500 bg-blue-900/20' : ''} ${!isOnline ? 'opacity-75' : ''}`}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02, y: -2 }}
+      className={`group relative bg-slate-700/30 backdrop-blur-sm border border-slate-600/30 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:bg-slate-600/40 hover:border-slate-500/50 ${
+        isSelected ? 'ring-2 ring-blue-500 bg-blue-900/20' : ''
+      } ${!isOnline ? 'opacity-75' : ''}`}
       onClick={onSelect}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3 flex-1">
           <div className="relative">
-            <div className={`w-10 h-10 bg-gradient-to-br ${isOnline ? 'from-blue-500 to-purple-500' : 'from-gray-500 to-gray-600'} rounded-full flex items-center justify-center`}>
-              <span className="text-white font-semibold text-sm">
+            <motion.div
+              whileHover={{ scale: 1.1 }}
+              className={`w-12 h-12 bg-gradient-to-br ${
+                isOnline 
+                  ? 'from-blue-500 to-purple-500' 
+                  : 'from-gray-500 to-gray-600'
+              } rounded-full flex items-center justify-center shadow-lg`}
+            >
+              <span className="text-white font-semibold text-lg">
                 {user.username?.charAt(0)?.toUpperCase() || '?'}
               </span>
-            </div>
+            </motion.div>
+            
             {/* Online/Offline indicator dot */}
-            <div className={`absolute -bottom-1 -right-1 w-4 h-4 ${isOnline ? 'bg-green-500' : 'bg-red-500'} border-2 border-slate-800 rounded-full`}></div>
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className={`absolute -bottom-1 -right-1 w-4 h-4 ${
+                isOnline ? 'bg-green-500' : 'bg-red-500'
+              } border-2 border-slate-800 rounded-full ${
+                isOnline ? 'animate-pulse' : ''
+              }`}
+            />
           </div>
           
           <div className="flex-1 min-w-0">
-            <p className="text-white font-medium truncate">{user.username || 'Unknown'}</p>
-            <p className={`text-xs ${isOnline ? 'text-green-400' : 'text-gray-400'}`}>
-              {isOnline ? 'Online' : (lastSeenText || 'Offline')}
+            <p className="text-white font-medium truncate text-sm">
+              {user.username || 'Unknown'}
             </p>
+            <div className="flex items-center space-x-1">
+              {!isOnline && lastSeenText && (
+                <Clock className="w-3 h-3 text-gray-400" />
+              )}
+              <p className={`text-xs ${
+                isOnline ? 'text-green-400' : 'text-gray-400'
+              }`}>
+                {isOnline ? 'Online' : (lastSeenText || 'Offline')}
+              </p>
+            </div>
           </div>
 
           {isSelected && (
-            <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center"
+            >
               <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
-            </div>
+            </motion.div>
           )}
         </div>
 
         {/* Show call buttons for online users */}
         {isOnline && (
-          <div className="flex items-center space-x-2 ml-3">
-            <button
+          <motion.div
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center space-x-1 ml-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          >
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
               onClick={(e) => {
                 e.stopPropagation();
                 onAudioCall?.();
@@ -78,12 +120,12 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
               className="p-2 text-gray-400 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-all duration-200"
               title="Audio call"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-            </button>
+              <Phone className="w-4 h-4" />
+            </motion.button>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
               onClick={(e) => {
                 e.stopPropagation();
                 onVideoCall?.();
@@ -91,14 +133,12 @@ const UserCard = ({ user, isSelected, onSelect, onAudioCall, onVideoCall }) => {
               className="p-2 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all duration-200"
               title="Video call"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </button>
-          </div>
+              <Video className="w-4 h-4" />
+            </motion.button>
+          </motion.div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 
