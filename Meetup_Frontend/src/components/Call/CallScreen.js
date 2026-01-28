@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import InviteModal from "./InviteModal";
 import {
@@ -38,8 +38,6 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   const [showMeetingInfo, setShowMeetingInfo] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [roomHost, setRoomHost] = useState(null);
-  const messagesRef = useRef([]); // Persist messages across socket changes
-  const messageIdsRef = useRef(new Set()); // Track message IDs to prevent duplicates
 
   // Get room ID from props or activeCall
   const currentRoomId = roomId || activeCall?.roomId;
@@ -70,6 +68,11 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   useEffect(() => {
     if (isRoomCall && currentRoomId && socket) {
       console.log("🚪 Joining room:", currentRoomId);
+      console.log("🚪 User info:", {
+        id: currentUser?.id,
+        username: currentUser?.username,
+      });
+      
       socket.emit("join-room", {
         roomId: currentRoomId,
         userInfo: {
@@ -79,6 +82,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       });
 
       return () => {
+        console.log("🚪 Leaving room:", currentRoomId);
         socket.emit("leave-room", { roomId: currentRoomId });
       };
     }
@@ -111,6 +115,8 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
   // SOCKET EVENTS
   useEffect(() => {
     if (!socket) return;
+
+    console.log("🔌 Setting up socket events for CallScreen");
 
     // Room events
     socket.on("room-participants", (existingParticipants) => {
@@ -174,32 +180,27 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       handleEndCall();
     });
 
-    // Chat message received - backend already filters out sender
-    const handleChatMessage = ({ senderName, message, timestamp, from }) => {
-      // Create unique message ID
-      const msgId = `${from}-${timestamp}-${message.substring(0, 10)}`;
-
-      // Prevent duplicates using message ID tracking
-      if (messageIdsRef.current.has(msgId)) {
-        console.log('⚠️ Duplicate message detected, ignoring:', msgId);
+    // Chat message handler - SIMPLIFIED
+    const handleChatMessage = (data) => {
+      console.log("💬 [CallScreen] Received chat message:", data);
+      
+      const { senderName, message, timestamp, from } = data;
+      
+      if (!senderName || !message) {
+        console.warn("💬 Invalid chat message data:", data);
         return;
       }
 
-      messageIdsRef.current.add(msgId);
-
       const newMsg = {
-        id: Date.now() + Math.random(), // Ensure unique ID
+        id: Date.now() + Math.random(),
         sender: senderName,
         text: message,
-        timestamp,
+        timestamp: timestamp || new Date().toISOString(),
         isMe: false,
       };
 
-      setMessages(prev => {
-        const updated = [...prev, newMsg];
-        messagesRef.current = updated; // Persist in ref
-        return updated;
-      });
+      console.log("💬 Adding message to chat:", newMsg);
+      setMessages(prev => [...prev, newMsg]);
 
       if (!isChatOpenRef.current) {
         setUnreadCount(prev => prev + 1);
@@ -209,6 +210,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
     socket.on("chat-message", handleChatMessage);
 
     return () => {
+      console.log("🧹 Cleaning up socket events");
       socket.off("room-participants");
       socket.off("user-joined-room");
       socket.off("user-left-room");
@@ -219,7 +221,7 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
       socket.off("call-ended");
       socket.off("chat-message", handleChatMessage);
     };
-  }, [socket]); // Only re-run when socket instance changes
+  }, [socket]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -310,42 +312,41 @@ const CallScreen = ({ remoteSocketId, onEndCall, roomId }) => {
     if (onEndCall) onEndCall();
   };
 
-  // Send chat message
+  // Send chat message - SIMPLIFIED
   const sendMessage = (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !socket) return;
-
-    // Check if we have a destination (either room ID or remote user)
-    const destination = isRoomCall ? currentRoomId : remoteSocketId;
-    if (!destination) {
-      console.warn("Cannot send message: No destination available");
+    if (!newMessage.trim() || !socket) {
+      console.warn("💬 Cannot send message: missing message or socket");
       return;
     }
 
+    // Determine destination
+    const destination = isRoomCall ? currentRoomId : remoteSocketId;
+    if (!destination) {
+      console.warn("💬 Cannot send message: No destination");
+      console.log("💬 Debug - isRoomCall:", isRoomCall, "currentRoomId:", currentRoomId, "remoteSocketId:", remoteSocketId);
+      return;
+    }
+
+    const messageText = newMessage.trim();
     const timestamp = new Date().toISOString();
-    const msgId = `${socket.id}-${timestamp}-${newMessage.trim().substring(0, 10)}`;
 
-    // Track our own message to prevent duplicates
-    messageIdsRef.current.add(msgId);
-
-    const msg = {
+    // Add message to local UI immediately
+    const localMsg = {
       id: Date.now() + Math.random(),
       sender: currentUser?.username || "You",
-      text: newMessage.trim(),
+      text: messageText,
       timestamp,
       isMe: true,
     };
 
-    // Optimistic update - add message immediately to UI
-    setMessages(prev => {
-      const updated = [...prev, msg];
-      messagesRef.current = updated;
-      return updated;
-    });
+    setMessages(prev => [...prev, localMsg]);
 
+    // Send to server
+    console.log("💬 Sending message to:", destination, "message:", messageText);
     socket.emit("chat-message", {
       to: destination,
-      message: newMessage.trim(),
+      message: messageText,
       senderName: currentUser?.username || "User",
     });
 

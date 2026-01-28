@@ -178,6 +178,12 @@ export const AppProvider = ({ children }) => {
       });
 
       return () => {
+        socket.off('users-list');
+        socket.off('incoming-call');
+        socket.off('room-invite');
+        socket.off('call-accepted');
+        socket.off('call-rejected');
+        socket.off('call-ended');
         socket.disconnect();
         socketRef.current = null;
       };

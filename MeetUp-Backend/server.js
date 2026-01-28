@@ -27,7 +27,9 @@ app.use(express.json());
 
 // Routes
 const authRoutes = require("./src/routes/authRoutes");
+const meetingRoutes = require("./src/routes/meetingRoutes");
 app.use("/api/auth", authRoutes);
+app.use("/api/meetings", meetingRoutes);
 
 // Basic route
 app.get("/", (req, res) => {
@@ -50,8 +52,16 @@ const io = new Server(server, {
   },
 });
 
-// Store online users (Phase-1 simple)
+// Store online users and all known users with last seen
 const onlineUsers = new Map();
+const allUsers = new Map(); // Stores all users with their last seen time
+const rooms = new Map(); // Store active rooms
+
+// Helper function to check if socket is host
+const isHost = (socket, roomId) => {
+  const room = rooms.get(roomId);
+  return room && room.host && room.host.socketId === socket.id;
+};
 
 io.on("connection", (socket) => {
   console.log("🟢 User connected:", socket.id);
@@ -59,23 +69,113 @@ io.on("connection", (socket) => {
   // User comes online
   socket.on("user-joined", (user) => {
     console.log("👤 User joined:", user.username, socket.id);
-    
+
+    // Add to online users
     onlineUsers.set(socket.id, {
       ...user,
       socketId: socket.id,
     });
 
-    // Send updated users list to ALL clients (including socketId)
-    const usersList = Array.from(onlineUsers.values()).map((u) => ({
-      id: u.id,
-      username: u.username,
-      socketId: u.socketId,
-    }));
-    
-    // Broadcast to ALL connected clients
+    // Update all users map (track by unique user id)
+    allUsers.set(user.id, {
+      id: user.id,
+      username: user.username,
+      socketId: socket.id,
+      isOnline: true,
+      lastSeen: null,
+    });
+
+    // Send updated users list to ALL clients
+    const usersList = Array.from(allUsers.values());
+
     io.emit("users-list", usersList);
     console.log("📋 Users list sent to all:", usersList.length, "users");
-    console.log("📋 Users:", usersList.map(u => u.username).join(", "));
+  });
+
+  // ================= ROOM MANAGEMENT =================
+
+  // Join a room
+  socket.on("join-room", ({ roomId, userInfo }) => {
+    console.log("🚪 User", userInfo.username, "joining room:", roomId);
+
+    socket.join(roomId);
+
+    // Get or create room
+    if (!rooms.has(roomId)) {
+      // First user to join becomes the host
+      rooms.set(roomId, {
+        participants: [],
+        host: {
+          id: userInfo.id,
+          username: userInfo.username,
+          socketId: socket.id,
+        },
+        createdAt: new Date(),
+        locked: false,
+        removedUsers: new Set(),
+        settings: {
+          allowScreenShare: true,
+          allowChat: true,
+        },
+      });
+      console.log("🏠 Room created with host:", userInfo.username);
+    }
+
+    const room = rooms.get(roomId);
+
+    // Check if user was removed
+    if (room.removedUsers.has(userInfo.id)) {
+      socket.emit("join-rejected", {
+        reason: "You have been removed from this meeting",
+      });
+      console.log("❌ User", userInfo.username, "was removed from room:", roomId);
+      return;
+    }
+
+    // Check if meeting is locked (only for non-hosts)
+    if (room.locked && room.host.id !== userInfo.id) {
+      socket.emit("join-rejected", {
+        reason: "This meeting is locked by the host",
+      });
+      console.log("🔒 User", userInfo.username, "cannot join locked room:", roomId);
+      return;
+    }
+
+    room.participants.push({
+      socketId: socket.id,
+      ...userInfo,
+    });
+
+    // Notify others in room
+    socket.to(roomId).emit("user-joined-room", {
+      socketId: socket.id,
+      userInfo,
+    });
+
+    // Send current participants and host info to the new user
+    socket.emit("room-participants", room.participants.filter(p => p.socketId !== socket.id));
+    socket.emit("room-host", room.host);
+
+    console.log("📋 Room", roomId, "now has", room.participants.length, "participants");
+  });
+
+  // Leave room
+  socket.on("leave-room", ({ roomId }) => {
+    console.log("🚪 User leaving room:", roomId);
+    socket.leave(roomId);
+
+    if (rooms.has(roomId)) {
+      const room = rooms.get(roomId);
+      room.participants = room.participants.filter(p => p.socketId !== socket.id);
+
+      // Notify others
+      socket.to(roomId).emit("user-left-room", { socketId: socket.id });
+
+      // Delete room if empty
+      if (room.participants.length === 0) {
+        rooms.delete(roomId);
+      }
+    }
   });
 
   // ================= CALL SIGNALING =================
@@ -139,23 +239,87 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Disconnect
+  // ================= CHAT MESSAGES =================
+
+  // Send chat message during call
+  socket.on("chat-message", ({ to, message, senderName }) => {
+    console.log("💬 [Backend] Chat message from", senderName, "to", to);
+
+    if (!to || !message || !senderName) {
+      console.log("❌ [Backend] Invalid chat message data:", { to, message, senderName });
+      return;
+    }
+
+    // Broadcast message to the destination (room or user)
+    // The sender already has the message in their UI
+    console.log("💬 [Backend] Broadcasting message to:", to);
+    socket.to(to).emit("chat-message", {
+      from: socket.id,
+      senderName,
+      message,
+      timestamp: new Date().toISOString(),
+    });
+    
+    console.log("✅ [Backend] Message sent successfully");
+  });
+
+  // ================= DISCONNECT HANDLER =================
+
   socket.on("disconnect", () => {
     console.log("🔴 User disconnected:", socket.id);
 
-    onlineUsers.delete(socket.id);
+    // Update online users
+    const disconnectedUser = onlineUsers.get(socket.id);
+    if (disconnectedUser) {
+      onlineUsers.delete(socket.id);
 
-    // Send updated users list
-    const usersList = Array.from(onlineUsers.values()).map((u) => ({
-      id: u.id,
-      username: u.username,
-      socketId: u.socketId,
-    }));
-    
+      // Update all users map with last seen
+      if (allUsers.has(disconnectedUser.id)) {
+        allUsers.set(disconnectedUser.id, {
+          ...allUsers.get(disconnectedUser.id),
+          isOnline: false,
+          lastSeen: new Date().toISOString(),
+          socketId: null,
+        });
+      }
+    }
+
+    // Clean up from all rooms
+    rooms.forEach((room, roomId) => {
+      const participantIndex = room.participants.findIndex(p => p.socketId === socket.id);
+      if (participantIndex !== -1) {
+        room.participants.splice(participantIndex, 1);
+
+        // Notify other participants in the room
+        socket.to(roomId).emit("user-left-room", { socketId: socket.id });
+
+        console.log("📋 User removed from room", roomId, "- Remaining:", room.participants.length);
+
+        // Delete room if empty
+        if (room.participants.length === 0) {
+          rooms.delete(roomId);
+          console.log("🗑️ Room", roomId, "deleted (empty)");
+        }
+      }
+    });
+
+    // Notify all users about updated user list
+    const usersList = Array.from(allUsers.values());
     io.emit("users-list", usersList);
-    
-    // Notify others that user left
+
+    // Notify others that user left (global)
     socket.broadcast.emit("user-left", socket.id);
+  });
+
+  // ================= INVITES =================
+
+  // Invite user to room
+  socket.on("invite-to-room", ({ roomId, targetSocketId, inviterName }) => {
+    console.log("📩 Invite from", inviterName, "to", targetSocketId, "for room", roomId);
+    io.to(targetSocketId).emit("room-invite", {
+      roomId,
+      inviterName,
+    });
   });
 });
 
