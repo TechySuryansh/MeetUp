@@ -5,6 +5,7 @@
 @layer base {
   html {
     @apply bg-slate-900;
+    scroll-behavior: smooth;
   }
   
   body {
