@@ -14,7 +14,8 @@ import {
   UserPlus,
   Clock,
   Activity,
-  MessageCircle
+  MessageCircle,
+  Heart
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import UserCard from './UserCard';
@@ -22,6 +23,8 @@ import CreateRoomModal from './CreateRoomModal';
 import IncomingCallModal from './Call/IncomingCallModal';
 import ProfilePage from './Profile/ProfilePage';
 import ChatPage from './Chat/ChatPage';
+import FriendsPage from './Friends/FriendsPage';
+import FriendRequestsModal from './Friends/FriendRequestsModal';
 
 const Dashboard = () => {
   const {
@@ -40,6 +43,8 @@ const Dashboard = () => {
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
+  const [showFriendRequests, setShowFriendRequests] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -118,6 +123,17 @@ const Dashboard = () => {
   // Show chat page if active
   if (showChat) {
     return <ChatPage onBack={() => setShowChat(false)} />;
+  }
+
+  // Show friends page if active
+  if (showFriends) {
+    return <FriendsPage 
+      onBack={() => setShowFriends(false)}
+      onStartChat={(userId) => {
+        setShowFriends(false);
+        setShowChat(true);
+      }}
+    />;
   }
 
   return (
@@ -209,11 +225,29 @@ const Dashboard = () => {
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
+                  onClick={() => setShowFriends(true)}
+                  className="p-2 text-gray-400 hover:text-white transition-colors relative"
+                  title="Friends"
+                >
+                  <Heart className="w-5 h-5" />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                   onClick={() => setShowChat(true)}
                   className="p-2 text-gray-400 hover:text-white transition-colors"
                   title="Messages"
                 >
                   <MessageCircle className="w-5 h-5" />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setShowFriendRequests(true)}
+                  className="p-2 text-gray-400 hover:text-white transition-colors relative"
+                  title="Friend Requests"
+                >
+                  <UserPlus className="w-5 h-5" />
                 </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
@@ -461,6 +495,22 @@ const Dashboard = () => {
           <CreateRoomModal
             onClose={() => setShowCreateRoom(false)}
             onStartCall={handleStartRoomCall}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Friend Requests Modal */}
+      <AnimatePresence>
+        {showFriendRequests && (
+          <FriendRequestsModal
+            isOpen={showFriendRequests}
+            onClose={() => setShowFriendRequests(false)}
+            onAccept={() => {
+              setShowFriendRequests(false);
+            }}
+            onReject={() => {
+              setShowFriendRequests(false);
+            }}
           />
         )}
       </AnimatePresence>
