@@ -13,13 +13,15 @@ import {
   ChevronRight,
   UserPlus,
   Clock,
-  Activity
+  Activity,
+  MessageCircle
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import UserCard from './UserCard';
 import CreateRoomModal from './CreateRoomModal';
 import IncomingCallModal from './Call/IncomingCallModal';
 import ProfilePage from './Profile/ProfilePage';
+import ChatPage from './Chat/ChatPage';
 
 const Dashboard = () => {
   const {
@@ -37,6 +39,7 @@ const Dashboard = () => {
   
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -110,6 +113,11 @@ const Dashboard = () => {
   // Show profile page if active
   if (showProfile) {
     return <ProfilePage onBack={() => setShowProfile(false)} />;
+  }
+
+  // Show chat page if active
+  if (showChat) {
+    return <ChatPage onBack={() => setShowChat(false)} />;
   }
 
   return (
@@ -198,6 +206,15 @@ const Dashboard = () => {
               </motion.div>
               
               <div className="flex items-center space-x-2">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setShowChat(true)}
+                  className="p-2 text-gray-400 hover:text-white transition-colors"
+                  title="Messages"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}

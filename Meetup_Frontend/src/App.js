@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
+import { ChatProvider } from './context/ChatContext';
 import LandingPage from './components/LandingPage';
 import AuthContainer from './components/auth/AuthContainer';
 import Dashboard from './components/Dashboard';
@@ -48,14 +49,16 @@ const AppRoutes = () => {
 const App = () => {
   return (
     <AppProvider>
-      <Router>
-        <div className="App">
-          <Routes>
-            <Route path="/" element={<AppRoutes />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-      </Router>
+      <ChatProvider>
+        <Router>
+          <div className="App">
+            <Routes>
+              <Route path="/" element={<AppRoutes />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </Router>
+      </ChatProvider>
     </AppProvider>
   );
 };
